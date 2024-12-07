@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config.settings import TELEGRAM_USER_ID
+from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE
 from handlers.callback import get_classification_keyboard, get_message_control_buttons
 from services.openai_service import get_ai_response
 from prompts.prompts import (
@@ -12,20 +12,33 @@ from prompts.prompts import (
 logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    if user_id != TELEGRAM_USER_ID:
-        await update.message.reply_text("抱歉，你没有使用此机器人的权限。")
-        return
+
+    logger.info(f"Received message: {update}")
+    # 检查是否是频道消息
+    if update.channel_post:
+        chat = update.channel_post.chat
+        # 直接处理频道消息，无需权限检查
+        message = update.channel_post
+    else:
+        # 检查是否是自动转发的频道消息
+        if update.message and update.message.is_automatic_forward:
+            message = update.message
+        else:
+            user_id = update.effective_user.id
+            if user_id != TELEGRAM_USER_ID:
+                await update.message.reply_text("抱歉，你没有使用此机器人的权限。")
+                return
+            message = update.message
 
     try:
         # 获取用户设置的默认模式，如果没有则使用聊天模式
-        mode = context.user_data.get('default_mode', 'chat')
+        mode = context.user_data.get('default_mode', DEFAULT_MODE)
         # 如果当前有临时模式，优先使用临时模式
         mode = context.user_data.get('mode', mode)
-        logger.info(f"Received message in {mode} mode")
+        # logger.info(f"Received message in {mode} mode")
         
         # 获取消息文本，只处理文本内容
-        message = update.message
+        message = update.channel_post if update.channel_post else update.message
         message_text = ""
         
         # 处理文本和实体
@@ -96,7 +109,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("抱歉，无法处理此类型的消息。请发送文本消息。")
             return
 
-        logger.info(f"Processing message: {message_text}")
+        # logger.info(f"Processing message: {message_text}")
         reply_message = await update.message.reply_text("思考中...")
         
         # 保存原始文本

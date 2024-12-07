@@ -1,3 +1,4 @@
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
@@ -31,6 +32,9 @@ CLASSIFY_HELP_TEXT = """
 - 学术/理论/研究
 - 专业领域知识
 - 跨学科内容
+
+💬 其他类
+- 其他无明显倾向的内容
 
 我会分析内容类型、复杂度，并提取核心信息。
 """
@@ -147,9 +151,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.info(f"Confirming classification for text: {original_text[:100]}...")
         logger.info(f"Full classification result: {classification}")
         
-        # 修改正则表达式以匹配方括号中的处理器名称
-        import re
-        prompt_match = re.search(r'处理器：\[(\w+_PROMPT)\]', classification)
+        # 更宽松的正则表达式，匹配任何包含 _PROMPT 的文本
+        prompt_match = re.search(r'(\w+_PROMPT)', classification)
         if prompt_match:
             prompt_name = prompt_match.group(1)
             logger.info(f"Extracted prompt name: {prompt_name}")
@@ -159,7 +162,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 'TECH_PROMPT': TECH_PROMPT,
                 'NEWS_PROMPT': NEWS_PROMPT,
                 'CULTURE_PROMPT': CULTURE_PROMPT,
-                'KNOWLEDGE_PROMPT': KNOWLEDGE_PROMPT
+                'KNOWLEDGE_PROMPT': KNOWLEDGE_PROMPT,
+                'CHAT_PROMPT': CHAT_PROMPT,
             }
             prompt = prompts.get(prompt_name, CHAT_PROMPT)
             logger.info(f"Selected prompt: {prompt_name}")

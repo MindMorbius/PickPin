@@ -23,3 +23,5 @@ if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_USER_ID, OPENAI_API_KEY]):
         "Missing required environment variables. Please check your .env file:\n"
         "TELEGRAM_BOT_TOKEN, TELEGRAM_USER_ID, and OPENAI_API_KEY are required."
     )
+
+DEFAULT_MODE = "classify"  # 可选值: "classify" 或 "chat"

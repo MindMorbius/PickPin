@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
 from telegram.ext import ContextTypes
-from config.settings import TELEGRAM_USER_ID
+from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +12,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.warning(f"Unauthorized access attempt from user {user_id}")
         await update.message.reply_text("抱歉，你没有使用此机器人的权限。")
         return
+    
+    context.user_data['default_mode'] = DEFAULT_MODE
+    context.user_data['mode'] = DEFAULT_MODE
         
     main_keyboard = [
         [
