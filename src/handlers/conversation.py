@@ -71,6 +71,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 chat_type = message.forward_from_chat.type
                 chat_title = message.forward_from_chat.title
                 message_text += f"\n\n转发自{chat_type}: {chat_title}"
+        
+        # 处理回复消息
+        if message.reply_to_message:
+            reply_text = ""
+            if message.reply_to_message.text:
+                reply_text = process_text_with_entities(
+                    message.reply_to_message.text,
+                    message.reply_to_message.entities
+                )
+            elif message.reply_to_message.caption:
+                reply_text = process_text_with_entities(
+                    message.reply_to_message.caption,
+                    message.reply_to_message.caption_entities
+                )
+            
+            if reply_text:
+                message_text = f"回复消息：\n{reply_text}\n\n当前消息：\n{message_text}"
 
         if not message_text:
             await update.message.reply_text("抱歉，无法处理此类型的消息。请发送文本消息。")
