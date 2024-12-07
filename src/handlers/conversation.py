@@ -18,9 +18,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     logger.info(f"Received message: {update}")
     # 检查是否是频道消息
     if update.channel_post:
-        chat = update.channel_post.chat
-        # 直接处理频道消息，无需权限检查
-        message = update.channel_post
+        return
     else:
         # 检查是否是自动转发的频道消息
         if update.message and update.message.is_automatic_forward:
@@ -156,6 +154,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 5s\n[{prompt_name}]",
             reply_to_message_id=message.message_id
         )
+        context.user_data['generation_message_id'] = countdown_msg.message_id
+        context.user_data['generation_chat_id'] = countdown_msg.chat_id
         
         # 倒计时逻辑
         for i in range(4, -1, -1):
