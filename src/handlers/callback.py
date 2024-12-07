@@ -37,9 +37,43 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
 
     if query.data == 'submit_content':
-        await query.answer("投稿功能开发中...", show_alert=True)
-        return
-        
+        try:
+            # 获取原始消息和生成的内容
+            original_message = query.message.reply_to_message
+            generated_content = query.message.text
+            
+            if original_message and generated_content:
+                # 先转发原始消息到频道
+                original_sent = await context.bot.forward_message(
+                    chat_id=-1002262761719,  # RKPin 频道
+                    from_chat_id=original_message.chat_id,
+                    message_id=original_message.message_id
+                )
+                
+                try:
+                    # 尝试用 Markdown 发送
+                    await context.bot.send_message(
+                        chat_id=-1002262761719,  # RKPin 频道
+                        text=generated_content,
+                        reply_to_message_id=original_sent.message_id,
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    # 如果 Markdown 解析失败，就用纯文本发送
+                    logger.warning(f"Failed to send with Markdown: {e}")
+                    await context.bot.send_message(
+                        chat_id=-1002262761719,  # RKPin 频道
+                        text=generated_content,
+                        reply_to_message_id=original_sent.message_id
+                    )
+                    
+                await query.message.reply_text("投稿成功!")
+            else:
+                await query.message.reply_text("未找到内容，无法投稿")
+        except Exception as e:
+            logger.error(f"Failed to send message: {e}")
+            await query.message.reply_text("投稿失败，请重试")
+
     elif query.data.startswith('prompt_'):
         prompt_type = query.data.replace('prompt_', '')
         prompts = {
@@ -83,12 +117,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         reply_markup=get_message_control_buttons()
                     )
                 except Exception as e:
-                    logger.error(f"Error generating content: {e}")
+                    logger.error(f"Failed to generate content: {e}")
                     await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=message_id,
-                        text="生成内容时出现错误，请重试",
-                        reply_markup=get_message_control_buttons()
+                        text="生成内容失败，请重试"
                     )
 
     elif query.data == 'delete_message':

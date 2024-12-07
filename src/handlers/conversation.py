@@ -16,22 +16,23 @@ logger = logging.getLogger(__name__)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     logger.info(f"Received message: {update}")
-    # 检查是否是频道消息
-    if update.channel_post:
+
+    if update.message.forward_signature == 'RKPin Bot':
+        logger.info(f"不回复bot消息")
         return
-    else:
-        # 检查是否是自动转发的频道消息
-        if update.message and update.message.is_automatic_forward:
-            message = update.message
-        else:
-            user_id = update.effective_user.id
-            if user_id != TELEGRAM_USER_ID:
-                await update.message.reply_text(
-                    "抱歉，您没有使用此机器人的权限。",
-                    reply_to_message_id=message.message_id
-                )
-                return
-            message = update.message
+    
+    if update.message.is_automatic_forward:
+        logger.info(f"不回复自动转发消息")
+        return
+    
+    user_id = update.effective_user.id
+    if user_id != TELEGRAM_USER_ID:
+        await update.message.reply_text(
+            "抱歉，您没有使用此机器人的权限。",
+            reply_to_message_id=update.message.message_id
+        )
+        return
+    message = update.message
 
     try:
         # 获取用户设置的默认模式，如果没有则使用聊天模式
@@ -118,6 +119,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # 保存原始文本和消息ID
         context.user_data['original_text'] = message_text
         context.user_data['original_message_id'] = message.message_id
+        context.user_data['original_message'] = update.message
         
         # 先进行分类,作为回复
         classify_reply = await message.reply_text(
@@ -151,14 +153,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         # 分类完成后再开始倒计时
         countdown_msg = await message.reply_text(
-            f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 5s\n[{prompt_name}]",
+            f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 2s\n[{prompt_name}]",
             reply_to_message_id=message.message_id
         )
-        context.user_data['generation_message_id'] = countdown_msg.message_id
-        context.user_data['generation_chat_id'] = countdown_msg.chat_id
         
         # 倒计时逻辑
-        for i in range(4, -1, -1):
+        for i in range(1, -1, -1):
             try:
                 await asyncio.sleep(1)
                 await countdown_msg.edit_text(
