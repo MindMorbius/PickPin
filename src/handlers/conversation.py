@@ -2,11 +2,13 @@ import logging
 from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE
-from handlers.callback import get_classification_keyboard, get_message_control_buttons
+from handlers.callback import get_message_control_buttons, get_prompt_buttons
 from services.openai_service import get_ai_response
 from prompts.prompts import (
-    CLASSIFY_PROMPT, CHAT_PROMPT
+    CLASSIFY_PROMPT, CHAT_PROMPT, TECH_PROMPT, NEWS_PROMPT, CULTURE_PROMPT, KNOWLEDGE_PROMPT
 )
+import asyncio
+import re
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +28,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             user_id = update.effective_user.id
             if user_id != TELEGRAM_USER_ID:
-                await update.message.reply_text("抱歉，你没有使用此机器人的权限。")
+                await update.message.reply_text(
+                    "抱歉，您没有使用此机器人的权限。",
+                    reply_to_message_id=message.message_id
+                )
                 return
             message = update.message
 
@@ -106,42 +111,99 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 message_text = f"回复消息：\n{reply_text}\n\n当前消息：\n{message_text}"
 
         if not message_text:
-            await update.message.reply_text("抱歉，无法处理此类型的消息。请发送文本消息。")
+            await message.reply_text(
+                "抱歉，无法处理此类型的消息。请发送文本消息。",
+                reply_to_message_id=message.message_id
+            )
             return
 
-        # logger.info(f"Processing message: {message_text}")
-        reply_message = await update.message.reply_text("思考中...")
-        
-        # 保存原始文本
+        # 保存原始文本和消息ID
         context.user_data['original_text'] = message_text
+        context.user_data['original_message_id'] = message.message_id
         
-        if mode == 'classify':
-            async for accumulated_text, should_update in get_ai_response(message_text, CLASSIFY_PROMPT):
-                if should_update:
-                    try:
-                        context.user_data['classification'] = accumulated_text
-                        # 合并分类键盘和控制按钮
-                        classify_keyboard = get_classification_keyboard().inline_keyboard
-                        control_buttons = get_message_control_buttons().inline_keyboard
-                        combined_keyboard = InlineKeyboardMarkup(classify_keyboard + control_buttons)
-                        
-                        await reply_message.edit_text(
-                            text=accumulated_text,
-                            reply_markup=combined_keyboard
+        # 先进行分类,作为回复
+        classify_reply = await message.reply_text(
+            "正在分析内容...",
+            reply_to_message_id=message.message_id
+        )
+        
+        prompt_name = 'CHAT_PROMPT'  # 默认值
+        async for classification_text, should_update in get_ai_response(message_text, CLASSIFY_PROMPT):
+            if should_update:
+                try:
+                    await classify_reply.edit_text(
+                        text=classification_text,
+                        reply_markup=get_message_control_buttons()
+                    )
+                    # 使用模糊匹配查找处理器信息
+                    if 'TECH_PROMPT' in classification_text:
+                        prompt_name = 'TECH_PROMPT'
+                    elif 'NEWS_PROMPT' in classification_text:
+                        prompt_name = 'NEWS_PROMPT'
+                    elif 'CULTURE_PROMPT' in classification_text:
+                        prompt_name = 'CULTURE_PROMPT'
+                    elif 'KNOWLEDGE_PROMPT' in classification_text:
+                        prompt_name = 'KNOWLEDGE_PROMPT'
+                except Exception as e:
+                    logger.warning(f"Failed to update classification: {e}")
+        
+        # 分类完成后再开始倒计时
+        countdown_msg = await message.reply_text(
+            f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 5s\n[{prompt_name}]",
+            reply_to_message_id=message.message_id,
+            reply_markup=get_prompt_buttons()
+        )
+        
+        # 倒计时逻辑
+        for i in range(4, -1, -1):
+            try:
+                await asyncio.sleep(1)
+                if countdown_msg.reply_markup is None:
+                    # 如果按钮被移除,说明用户已经选择了prompt
+                    return
+                await countdown_msg.edit_text(
+                    f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 {i}s\n[{prompt_name}]",
+                    reply_markup=get_prompt_buttons()
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update countdown: {e}")
+            
+        # 倒计时结束,从消息文本中提取prompt
+        try:
+            prompt_match = re.search(r'\[(\w+_PROMPT)\]', countdown_msg.text)
+            if prompt_match:
+                prompt_name = prompt_match.group(1)
+                prompt = {
+                    'TECH_PROMPT': TECH_PROMPT,
+                    'NEWS_PROMPT': NEWS_PROMPT,
+                    'CULTURE_PROMPT': CULTURE_PROMPT,
+                    'KNOWLEDGE_PROMPT': KNOWLEDGE_PROMPT,
+                    'CHAT_PROMPT': CHAT_PROMPT,
+                }.get(prompt_name, CHAT_PROMPT)
+                
+                # 移除按钮,表示开始生成
+                await countdown_msg.edit_text(
+                    f"使用{prompt_name.split('_')[0]}解释器生成内容中...\n[{prompt_name}]"
+                )
+                
+                async for content_text, should_update in get_ai_response(message_text, prompt):
+                    if should_update:
+                        await countdown_msg.edit_text(
+                            text=content_text,
+                            reply_markup=get_prompt_buttons()
                         )
-                    except Exception as e:
-                        logger.warning(f"Failed to update message: {e}")
-        else:
-            async for accumulated_text, should_update in get_ai_response(message_text, CHAT_PROMPT):
-                if should_update:
-                    try:
-                        await reply_message.edit_text(
-                            text=accumulated_text,
-                            reply_markup=get_message_control_buttons()
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update message: {e}")
-                    
+            else:
+                logger.warning("No prompt found in countdown message")
+                await countdown_msg.edit_text(
+                    "未能识别合适的处理器，请手动选择",
+                    reply_markup=get_prompt_buttons()
+                )
+        except Exception as e:
+            logger.error(f"Error generating content: {e}")
+            await countdown_msg.edit_text(
+                "生成内容时出现错误，请重试",
+                reply_markup=get_prompt_buttons()
+            )
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)
-        await update.message.reply_text("抱歉，处理您的消息时出现错误。") 
+        await message.reply_text("抱歉，处理您的消息时出现错误。") 

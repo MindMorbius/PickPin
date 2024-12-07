@@ -13,28 +13,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("抱歉，你没有使用此机器人的权限。")
         return
     
-    context.user_data['default_mode'] = DEFAULT_MODE
-    context.user_data['mode'] = DEFAULT_MODE
-        
-    main_keyboard = [
-        [
-            InlineKeyboardButton("信息分类", callback_data='classify'),
-            InlineKeyboardButton("通用聊天", callback_data='chat'),
-        ],
-        [InlineKeyboardButton("设置菜单", callback_data='settings')],
-        [
-            InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
-            InlineKeyboardButton("📝 反馈", callback_data='feedback'),
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(main_keyboard)
-    
     await update.message.reply_text(
-        "👋 你好！我是一个 AI 助手，请选择以下功能：\n\n"
-        "🔍 信息分类：帮你分析新闻、咨询、热点等内容\n"
-        "💭 通用聊天：随意聊天，回答问题\n"
-        "⚙️ 设置菜单：调整机器人配置",
-        reply_markup=reply_markup
+        "👋 你好！我是 PickPin 的镜界信息助手\n\n"
+        "直接发送消息给我，我会:\n"
+        "1. 分析内容并进行分类\n"
+        "2. 使用合适的解释器生成内容\n\n"
+        "你也可以手动选择使用不同的解释器"
     )
 
 async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
