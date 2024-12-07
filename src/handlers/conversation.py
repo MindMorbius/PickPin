@@ -131,10 +131,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         async for classification_text, should_update in get_ai_response(message_text, CLASSIFY_PROMPT):
             if should_update:
                 try:
-                    await classify_reply.edit_text(
-                        text=classification_text,
-                        reply_markup=get_message_control_buttons()
-                    )
+                    # 先不添加按钮
+                    await classify_reply.edit_text(text=classification_text)
                     # 使用模糊匹配查找处理器信息
                     if 'TECH_PROMPT' in classification_text:
                         prompt_name = 'TECH_PROMPT'
@@ -147,23 +145,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 except Exception as e:
                     logger.warning(f"Failed to update classification: {e}")
         
+        # 分类完成后再添加按钮
+        await classify_reply.edit_text(
+            text=classification_text,
+            reply_markup=get_prompt_buttons()
+        )
+        
         # 分类完成后再开始倒计时
         countdown_msg = await message.reply_text(
             f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 5s\n[{prompt_name}]",
-            reply_to_message_id=message.message_id,
-            reply_markup=get_prompt_buttons()
+            reply_to_message_id=message.message_id
         )
         
         # 倒计时逻辑
         for i in range(4, -1, -1):
             try:
                 await asyncio.sleep(1)
-                if countdown_msg.reply_markup is None:
-                    # 如果按钮被移除,说明用户已经选择了prompt
-                    return
                 await countdown_msg.edit_text(
-                    f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 {i}s\n[{prompt_name}]",
-                    reply_markup=get_prompt_buttons()
+                    f"将使用{prompt_name.split('_')[0]}解释器生成内容，倒计时 {i}s\n[{prompt_name}]"
                 )
             except Exception as e:
                 logger.warning(f"Failed to update countdown: {e}")
@@ -188,21 +187,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 
                 async for content_text, should_update in get_ai_response(message_text, prompt):
                     if should_update:
-                        await countdown_msg.edit_text(
-                            text=content_text,
-                            reply_markup=get_prompt_buttons()
-                        )
+                        await countdown_msg.edit_text(text=content_text)
+                await countdown_msg.edit_text(
+                    text=content_text,
+                    reply_markup=get_message_control_buttons()
+                )    
             else:
                 logger.warning("No prompt found in countdown message")
                 await countdown_msg.edit_text(
                     "未能识别合适的处理器，请手动选择",
-                    reply_markup=get_prompt_buttons()
+                    reply_markup=get_message_control_buttons()
                 )
         except Exception as e:
             logger.error(f"Error generating content: {e}")
             await countdown_msg.edit_text(
                 "生成内容时出现错误，请重试",
-                reply_markup=get_prompt_buttons()
+                reply_markup=get_message_control_buttons()
             )
     except Exception as e:
         logger.error(f"Error: {str(e)}", exc_info=True)

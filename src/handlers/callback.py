@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 def get_message_control_buttons():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗑️ 清除", callback_data='delete_message')]
+        [
+            InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+            InlineKeyboardButton("📮 投稿", callback_data='submit_content')
+        ]
     ])
 
 def get_prompt_buttons():
@@ -26,15 +29,19 @@ def get_prompt_buttons():
         [
             InlineKeyboardButton("知识", callback_data='prompt_knowledge'), 
             InlineKeyboardButton("通用", callback_data='prompt_chat'),
-            InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
         ]
     ])
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    
-    if query.data.startswith('prompt_'):
+
+    if query.data == 'submit_content':
+        # 暂时只返回一个提示
+        await query.answer("投稿功能开发中...", show_alert=True)
+        return
+        
+    elif query.data.startswith('prompt_'):
         prompt_type = query.data.replace('prompt_', '')
         prompts = {
             'tech': TECH_PROMPT,
@@ -50,7 +57,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             async for accumulated_text, should_update in get_ai_response(original_text, prompt):
                 if should_update:
                     try:
-                        await query.message.delete()
                         await query.message.reply_text(
                             text=accumulated_text,
                             reply_to_message_id=original_message_id,
