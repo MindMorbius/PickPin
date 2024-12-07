@@ -1,8 +1,8 @@
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config.settings import TELEGRAM_USER_ID
-from handlers.callback import get_classification_keyboard
+from handlers.callback import get_classification_keyboard, get_message_control_buttons
 from services.openai_service import get_ai_response
 from prompts.prompts import (
     CLASSIFY_PROMPT, CHAT_PROMPT
@@ -18,7 +18,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     try:
-        mode = context.user_data.get('mode', 'chat')
+        # 获取用户设置的默认模式，如果没有则使用聊天模式
+        mode = context.user_data.get('default_mode', 'chat')
+        # 如果当前有临时模式，优先使用临时模式
+        mode = context.user_data.get('mode', mode)
         logger.info(f"Received message in {mode} mode")
         
         # 获取消息文本，只处理文本内容
@@ -104,9 +107,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 if should_update:
                     try:
                         context.user_data['classification'] = accumulated_text
+                        # 合并分类键盘和控制按钮
+                        classify_keyboard = get_classification_keyboard().inline_keyboard
+                        control_buttons = get_message_control_buttons().inline_keyboard
+                        combined_keyboard = InlineKeyboardMarkup(classify_keyboard + control_buttons)
+                        
                         await reply_message.edit_text(
                             text=accumulated_text,
-                            reply_markup=get_classification_keyboard()
+                            reply_markup=combined_keyboard
                         )
                     except Exception as e:
                         logger.warning(f"Failed to update message: {e}")
@@ -114,7 +122,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             async for accumulated_text, should_update in get_ai_response(message_text, CHAT_PROMPT):
                 if should_update:
                     try:
-                        await reply_message.edit_text(accumulated_text)
+                        await reply_message.edit_text(
+                            text=accumulated_text,
+                            reply_markup=get_message_control_buttons()
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to update message: {e}")
                     

@@ -44,24 +44,100 @@ def get_classification_keyboard():
         [InlineKeyboardButton("❌ 取消输入", callback_data='cancel_input')]
     ])
 
+def get_message_control_buttons():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+            InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+        ]
+    ])
+
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     
     if query.data == 'classify':
-        await query.edit_message_text(CLASSIFY_HELP_TEXT)
+        keyboard = [
+            [InlineKeyboardButton("↩️ 返回主菜单", callback_data='back_to_main')],
+            [
+                InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+                InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+            ]
+        ]
+        await query.edit_message_text(
+            CLASSIFY_HELP_TEXT,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         context.user_data['mode'] = 'classify'
         
     elif query.data == 'chat':
+        keyboard = [
+            [InlineKeyboardButton("↩️ 返回主菜单", callback_data='back_to_main')],
+            [
+                InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+                InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+            ]
+        ]
         await query.edit_message_text(
-            "💬 已进入通用聊天模式，请随意发送消息。"
+            "💬 已进入通用聊天模式，请随意发送消息。",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         context.user_data['mode'] = 'chat'
         
     elif query.data == 'settings':
+        keyboard = [
+            [
+                InlineKeyboardButton("🔍 默认分类模式", callback_data='set_mode_classify'),
+                InlineKeyboardButton("💭 默认聊天模式", callback_data='set_mode_chat'),
+            ],
+            [InlineKeyboardButton("↩️ 返回主菜单", callback_data='back_to_main')],
+            [
+                InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+                InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+            ]
+        ]
         await query.edit_message_text(
-            "⚙️ 设置功能正在开发中...\n"
-            "请使用其他功能。"
+            "⚙️ 设置\n\n"
+            "请选择机器人的默认回复模式：\n"
+            "• 分类模式：自动分析和分类信息\n"
+            "• 聊天模式：直接对话交流",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif query.data.startswith('set_mode_'):
+        mode = query.data.replace('set_mode_', '')
+        context.user_data['default_mode'] = mode
+        keyboard = [
+            [InlineKeyboardButton("↩️ 返回设置", callback_data='settings')],
+            [
+                InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+                InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+            ]
+        ]
+        await query.edit_message_text(
+            f"✅ 已设置默认模式为: {'分类模式' if mode == 'classify' else '聊天模式'}\n\n"
+            "你可以随时在设置中更改此选项。",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif query.data == 'back_to_main':
+        keyboard = [
+            [
+                InlineKeyboardButton("信息分类", callback_data='classify'),
+                InlineKeyboardButton("通用聊天", callback_data='chat'),
+            ],
+            [InlineKeyboardButton("设置菜单", callback_data='settings')],
+            [
+                InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+                InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+            ]
+        ]
+        await query.edit_message_text(
+            "👋 你好！我是PickPin的镜界信息助手，请选择以下功能：\n\n"
+            "🔍 信息分类：帮你分析新闻、咨询、热点，转化为镜界内容\n"
+            "💭 通用聊天：随意聊天，回答问题\n"
+            "⚙️ 设置菜单：调整机器人默认模式，当前默认为聊天模式",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
     elif query.data == 'confirm_classify':
@@ -115,3 +191,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     elif query.data == 'cancel_input':
         await query.message.delete() 
+    
+    elif query.data == 'delete_message':
+        await query.message.delete()
+    
+    elif query.data == 'feedback':
+        # 预留反馈功能
+        await query.answer("反馈功能开发中...")

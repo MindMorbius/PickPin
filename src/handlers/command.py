@@ -13,14 +13,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("抱歉，你没有使用此机器人的权限。")
         return
         
-    keyboard= [
+    main_keyboard = [
         [
             InlineKeyboardButton("信息分类", callback_data='classify'),
             InlineKeyboardButton("通用聊天", callback_data='chat'),
         ],
-        [InlineKeyboardButton("设置菜单", callback_data='settings')]
+        [InlineKeyboardButton("设置菜单", callback_data='settings')],
+        [
+            InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
+            InlineKeyboardButton("📝 反馈", callback_data='feedback'),
+        ]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = InlineKeyboardMarkup(main_keyboard)
     
     await update.message.reply_text(
         "👋 你好！我是一个 AI 助手，请选择以下功能：\n\n"
