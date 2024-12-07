@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from telegram.error import NetworkError, TimedOut
 import asyncio
 from config.settings import TELEGRAM_BOT_TOKEN, HTTP_PROXY, TELEGRAM_USER_ID
-from handlers.command import start_command
+from handlers.command import start_command, get_id_command
 from handlers.conversation import handle_message
 from handlers.callback import handle_callback
 
@@ -26,6 +26,7 @@ def main() -> None:
         .build()
 
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("getid", get_id_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(
         (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.CAPTION) & ~filters.COMMAND, 

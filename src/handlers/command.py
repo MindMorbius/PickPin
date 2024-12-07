@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
 from telegram.ext import ContextTypes
 from config.settings import TELEGRAM_USER_ID
 
@@ -33,3 +33,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "⚙️ 设置菜单：调整机器人配置",
         reply_markup=reply_markup
     )
+
+async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    user = update.effective_user
+    
+    if chat.type == 'private':
+        await update.message.reply_text(f"你的用户 ID 是: {user.id}")
+    else:
+        await update.message.reply_text(
+            f"群组/频道 ID: {chat.id}\n"
+            f"类型: {chat.type}\n"
+            f"名称: {chat.title}\n"
+            f"你的用户 ID: {user.id}"
+        )
