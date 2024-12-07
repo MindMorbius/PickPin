@@ -27,7 +27,10 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(
+        (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.CAPTION) & ~filters.COMMAND, 
+        handle_message
+    ))
 
     async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         error = context.error
