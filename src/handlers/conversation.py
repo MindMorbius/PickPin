@@ -3,7 +3,7 @@ from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE
 from handlers.callback import get_message_control_buttons, get_prompt_buttons
-from services.openai_service import get_ai_response
+from services.ai_service import get_ai_response
 from prompts.prompts import (
     CLASSIFY_PROMPT, CHAT_PROMPT, TECH_PROMPT, NEWS_PROMPT, CULTURE_PROMPT, KNOWLEDGE_PROMPT
 )
@@ -185,9 +185,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"使用{prompt_name.split('_')[0]}解释器生成内容中...\n[{prompt_name}]"
                 )
                 
+                last_text = ""  # 跟踪上一次发送的文本
                 async for content_text, should_update in get_ai_response(message_text, prompt):
-                    if should_update:
-                        await countdown_msg.edit_text(text=content_text)
+                    if should_update and content_text != last_text:  # 只在内容变化时更新
+                        try:
+                            last_text = content_text
+                            await countdown_msg.edit_text(text=content_text)
+                        except Exception as e:
+                            if "message is not modified" not in str(e).lower():
+                                logger.warning(f"Failed to update message: {e}")
+                            continue
                 await countdown_msg.edit_text(
                     text=content_text,
                     reply_markup=get_message_control_buttons()
@@ -201,7 +208,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             logger.error(f"Error generating content: {e}")
             await countdown_msg.edit_text(
-                "生成内容时出现错误，请重试",
+                "生成内容时出错，请重试",
                 reply_markup=get_message_control_buttons()
             )
     except Exception as e:

@@ -2,7 +2,7 @@ import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
-from services.openai_service import get_ai_response
+from services.ai_service import get_ai_response
 from prompts.prompts import (
     CLASSIFY_HELP_TEXT,
     CLASSIFY_PROMPT, TECH_PROMPT, NEWS_PROMPT, 
