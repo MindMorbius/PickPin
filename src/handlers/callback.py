@@ -86,43 +86,36 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         prompt = prompts.get(prompt_type)
         if prompt:
             original_text = context.user_data.get('original_text', '')
-            message_id = context.user_data.get('generation_message_id')
-            chat_id = context.user_data.get('generation_chat_id')
+            original_message = context.user_data.get('original_message')
             
-            if message_id and chat_id:
+            if original_message:
+                # 发送新消息而不是编辑旧消息
+                generation_message = await original_message.reply_text(
+                    "正在生成内容...",
+                    reply_to_message_id=original_message.message_id
+                )
+                
+                # 保存新消息的ID用于后续更新
+                context.user_data['generation_message_id'] = generation_message.message_id
+                context.user_data['generation_chat_id'] = generation_message.chat_id
+                
                 try:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text="正在生成内容..."
-                    )
-                    
                     last_text = ""
                     async for accumulated_text, should_update in get_ai_response(original_text, prompt):
                         if should_update:
                             try:
                                 last_text = accumulated_text
-                                await context.bot.edit_message_text(
-                                    chat_id=chat_id,
-                                    message_id=message_id,
-                                    text=accumulated_text
-                                )
+                                await generation_message.edit_text(text=accumulated_text)
                             except Exception as e:
                                 logger.warning(f"Failed to update message: {e}")
                     
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
+                    await generation_message.edit_text(
                         text=last_text,
                         reply_markup=get_message_control_buttons()
                     )
                 except Exception as e:
                     logger.error(f"Failed to generate content: {e}")
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text="生成内容失败，请重试"
-                    )
+                    await generation_message.edit_text("生成内容失败，请重试")
 
     elif query.data == 'delete_message':
         await query.message.delete()
