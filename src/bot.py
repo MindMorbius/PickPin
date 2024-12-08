@@ -60,7 +60,7 @@ def main() -> None:
         try:
             await app.bot.send_message(
                 chat_id=TELEGRAM_USER_ID,
-                text="🤖 PickPin 的镜界信息助手已启动完成，可以开始使用了！\n使用 /start 开始对话"
+                text="🤖 PickPin - 为RKPin频道提供信息处理和投稿服务\n\n已启动完成，使用 /start 开始对话"
             )
         except Exception as e:
             logger.error(f"Failed to send startup message: {e}")

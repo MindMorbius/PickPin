@@ -14,11 +14,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     
     await update.message.reply_text(
-        "👋 你好！我是 PickPin 的镜界信息助手\n\n"
+        "👋 你好！我是 PickPin 机器人\n\n"
+        "我可以帮助你处理和投稿信息到 RKPin 频道\n\n"
         "直接发送消息给我，我会:\n"
-        "1. 分析内容并进行分类\n"
-        "2. 使用合适的解释器生成内容\n\n"
-        "你也可以手动选择使用不同的解释器"
+        "1. 智能分析内容并分类\n" 
+        "2. 生成适合发布的内容格式\n\n"
+        "你也可以手动选择不同的内容处理模式"
     )
 
 async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
