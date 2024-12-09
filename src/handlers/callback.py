@@ -8,71 +8,52 @@ from prompts.prompts import (
     CLASSIFY_PROMPT, TECH_PROMPT, NEWS_PROMPT, 
     CULTURE_PROMPT, KNOWLEDGE_PROMPT, CHAT_PROMPT
 )
+from config.settings import CHANNEL_ID, GROUP_ID, TELEGRAM_USER_ID
+from handlers.conversation import TelegramMessageHandler
+from utils.buttons import (
+    get_content_options_buttons,
+    get_vote_buttons
+)
 
 logger = logging.getLogger(__name__)
 
-def get_message_control_buttons():
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🗑️ 清除", callback_data='delete_message'),
-            InlineKeyboardButton("📮 投稿", callback_data='submit_content')
-        ]
-    ])
-
-def get_prompt_buttons():
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("科技", callback_data='prompt_tech'),
-            InlineKeyboardButton("新闻", callback_data='prompt_news'),
-            InlineKeyboardButton("文化", callback_data='prompt_culture'),
-        ],
-        [
-            InlineKeyboardButton("知识", callback_data='prompt_knowledge'), 
-            InlineKeyboardButton("通用", callback_data='prompt_chat'),
-        ]
-    ])
-
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    handler = TelegramMessageHandler(update, context)
     query = update.callback_query
     await query.answer()
 
     if query.data == 'submit_content':
         try:
-            # 获取原始消息和生成的内容
             original_message = query.message.reply_to_message
             generated_content = query.message.text
             
             if original_message and generated_content:
-                # 先转发原始消息到频道
-                original_sent = await context.bot.forward_message(
-                    chat_id=-1002262761719,  # RKPin 频道
-                    from_chat_id=original_message.chat_id,
-                    message_id=original_message.message_id
+                original_sent = await handler.forward_message(
+                    CHANNEL_ID,
+                    original_message
                 )
                 
                 try:
-                    # 尝试用 Markdown 发送
-                    await context.bot.send_message(
-                        chat_id=-1002262761719,  # RKPin 频道
-                        text=generated_content,
+                    await handler.send_message(
+                        generated_content,
                         reply_to_message_id=original_sent.message_id,
-                        parse_mode='Markdown'
+                        parse_mode='Markdown',
+                        chat_id=CHANNEL_ID
                     )
                 except Exception as e:
-                    # 如果 Markdown 解析失败，就用纯文本发送
                     logger.warning(f"Failed to send with Markdown: {e}")
-                    await context.bot.send_message(
-                        chat_id=-1002262761719,  # RKPin 频道
-                        text=generated_content,
-                        reply_to_message_id=original_sent.message_id
+                    await handler.send_message(
+                        generated_content,
+                        reply_to_message_id=original_sent.message_id,
+                        chat_id=CHANNEL_ID
                     )
                     
-                await query.message.reply_text("投稿成功!")
+                await handler.send_message("投稿成功!")
             else:
-                await query.message.reply_text("未找到内容，无法投稿")
+                await handler.send_message("未找到内容，无法投稿")
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
-            await query.message.reply_text("投稿失败，请重试")
+            await handler.send_message("投稿失败，请重试")
 
     elif query.data.startswith('prompt_'):
         prompt_type = query.data.replace('prompt_', '')
@@ -103,19 +84,212 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     last_text = ""
                     async for accumulated_text, should_update in get_ai_response(original_text, prompt):
                         if should_update:
-                            try:
-                                last_text = accumulated_text
-                                await generation_message.edit_text(text=accumulated_text)
-                            except Exception as e:
-                                logger.warning(f"Failed to update message: {e}")
+                            last_text = accumulated_text
+                            await handler.edit_message(generation_message, accumulated_text)
                     
-                    await generation_message.edit_text(
-                        text=last_text,
-                        reply_markup=get_message_control_buttons()
+                    await handler.edit_message(
+                        generation_message,
+                        last_text,
                     )
                 except Exception as e:
                     logger.error(f"Failed to generate content: {e}")
-                    await generation_message.edit_text("生成内容失败，请重试")
+                    await handler.edit_message(generation_message, "生成内容失败，请重试")
 
     elif query.data == 'delete_message':
         await query.message.delete()
+
+    elif query.data == 'keep_content':
+        await query.message.edit_text(text=query.message.text)
+        
+    elif query.data == 'start_vote':
+        # 获取原始消息和分类结果
+        original_message = context.user_data.get('original_message')
+        classification_result = context.user_data.get('classification_result')
+        generated_content = query.message.text
+        
+        if not all([original_message, classification_result, generated_content]):
+            await query.message.edit_text("无法发起投票，信息已失效")
+            return
+            
+        # 在群组中发起投票
+        vote_text = f"{classification_result}\n\n用户 {query.from_user.first_name} 发起了投稿投票 (120s)\n谁赞成，谁反对？"
+        vote_msg = await handler.send_message(
+            vote_text,
+            reply_to_message_id=original_message.message_id,
+            reply_markup=get_vote_buttons(),
+            chat_id=GROUP_ID
+        )
+        
+        # 保存投票相关信息
+        context.chat_data['votes'] = {'up': 0, 'down': 0, 'voters': set()}
+        context.chat_data['vote_message'] = vote_msg
+        context.chat_data['vote_content'] = generated_content
+        context.chat_data['vote_initiator'] = query.from_user.id
+        
+        # 设置定时器
+        context.job_queue.run_once(
+            check_vote_result,
+            120,
+            name='vote_check',
+            data={
+                'channel_id': CHANNEL_ID,
+                'original_message': original_message,
+                'vote_message_id': vote_msg.message_id,
+                'user_id': query.from_user.id,
+            }
+        )
+        
+        # 清除私聊中的按钮
+        await query.message.edit_text(text=query.message.text)
+
+    elif query.data in ['admin_approve', 'admin_reject']:
+        if query.from_user.id != TELEGRAM_USER_ID:
+            await query.answer("只有管理员可以使用此功能")
+            return
+            
+        # 取消定时器
+        for job in context.job_queue.get_jobs_by_name('vote_check'):
+            job.schedule_removal()
+            
+        if query.data == 'admin_approve':
+            try:
+                # 从消息中获取原始消息
+                original_message = query.message.reply_to_message
+                generated_content = context.chat_data.get('vote_content')
+                
+                if not all([original_message, generated_content]):
+                    logger.error("Missing required data for publishing")
+                    return
+                    
+                # 转发原始消息到频道
+                original_sent = await context.bot.forward_message(
+                    chat_id=CHANNEL_ID,
+                    from_chat_id=original_message.chat_id,
+                    message_id=original_message.message_id
+                )
+                
+                # 发送生成的内容
+                try:
+                    await context.bot.send_message(
+                        chat_id=CHANNEL_ID,
+                        text=generated_content,
+                        reply_to_message_id=original_sent.message_id,
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    # 如果 Markdown 解析失败，用纯文本发送
+                    logger.warning(f"Failed to send with Markdown: {e}")
+                    await context.bot.send_message(
+                        chat_id=CHANNEL_ID,
+                        text=generated_content,
+                        reply_to_message_id=original_sent.message_id
+                    )
+            except Exception as e:
+                logger.error(f"Failed to publish content: {e}")
+        else:
+            user_id = context.chat_data.get('vote_initiator')
+            if user_id:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="感谢你的投稿，虽然没成功，不是你的问题哦"
+                )
+                
+        # 清理投票消息
+        vote_msg = context.chat_data.get('vote_message')
+        if vote_msg:
+            await vote_msg.delete()
+            
+    elif query.data in ['vote_up', 'vote_down']:
+        if 'votes' not in context.chat_data:
+            return
+            
+        voter_id = query.from_user.id
+        if voter_id in context.chat_data['votes']['voters']:
+            await query.answer("你已经投过票了")
+            return
+            
+        vote_type = 'up' if query.data == 'vote_up' else 'down'
+        context.chat_data['votes'][vote_type] += 1
+        context.chat_data['votes']['voters'].add(voter_id)
+        
+        # 更新投票按钮
+        await handler.edit_message(
+            query.message,
+            query.message.text,
+            reply_markup=get_vote_buttons(
+                context.chat_data['votes']['up'],
+                context.chat_data['votes']['down']
+            )
+        )
+
+async def check_vote_result(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    data = job.data
+    
+    votes = context.chat_data.get('votes', {'up': 0, 'down': 0})
+    vote_content = context.chat_data.get('vote_content')
+    
+    if votes['up'] > votes['down']:
+        # 投票通过，发布内容
+        original_sent = await context.bot.forward_message(
+            chat_id=data['channel_id'],
+            from_chat_id=data['original_message'].chat_id,
+            message_id=data['original_message'].message_id
+        )
+        
+        await context.bot.send_message(
+            chat_id=data['channel_id'],
+            text=vote_content,
+            reply_to_message_id=original_sent.message_id
+        )
+    else:
+        # 投票未通过，通知用户
+        await context.bot.send_message(
+            chat_id=data['user_id'],
+            text="感谢你的投稿，虽然没成功，但是不是你的问题哦"
+        )
+    
+    # 清理投票消息
+    try:
+        await context.bot.delete_message(
+            chat_id=data['channel_id'],
+            message_id=data['vote_message_id']
+        )
+    except Exception as e:
+        logger.error(f"Failed to delete vote message: {e}")
+async def publish_content(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """发布内容到频道"""
+    original_message = context.job.data.get('original_message')  # 从 job data 获取
+    generated_content = context.chat_data.get('vote_content')
+    
+    if not all([original_message, generated_content]):
+        logger.error("Missing required data for publishing")
+        return
+        
+    try:
+        # 转发原始消息到频道
+        original_sent = await context.bot.forward_message(
+            chat_id=CHANNEL_ID,
+            from_chat_id=original_message.chat_id,
+            message_id=original_message.message_id
+        )
+        
+        # 发送生成的内容
+        try:
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=generated_content,
+                reply_to_message_id=original_sent.message_id,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            # 如果 Markdown 解析失败，用纯文本发送
+            logger.warning(f"Failed to send with Markdown: {e}")
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=generated_content,
+                reply_to_message_id=original_sent.message_id
+            )
+            
+    except Exception as e:
+        logger.error(f"Failed to publish content: {e}")

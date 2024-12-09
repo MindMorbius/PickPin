@@ -1,8 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE
-from handlers.callback import get_message_control_buttons, get_prompt_buttons
+from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE, CHANNEL_ID, GROUP_ID
 from services.ai_service import get_ai_response
 from prompts.prompts import (
     CLASSIFY_PROMPT, CHAT_PROMPT, TECH_PROMPT, NEWS_PROMPT, CULTURE_PROMPT, KNOWLEDGE_PROMPT, NORMAL_PROMPT
@@ -10,115 +9,28 @@ from prompts.prompts import (
 import asyncio
 import re
 from telegram.error import NetworkError, TimedOut
+from utils.telegram_handler import TelegramMessageHandler
 
 
 logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-
-    logger.info(f"Received message: {update}")
-
-    if update.message.forward_signature == 'RKPin Bot':
-        logger.info(f"不回复bot消息")
+    handler = TelegramMessageHandler(update, context)
+    
+    message_text = get_message_text(update.message)
+    
+    if not message_text:
+        await handler.send_message("无法处理此类型的消息")
         return
     
-    if update.message.is_automatic_forward:
-        logger.info(f"不回复自动转发消息")
+    status_msg = await handler.send_message("正在处理消息...")
+    if not status_msg:
         return
     
-    user_id = update.effective_user.id
-    chat = update.effective_chat
-    
-    if chat.type == 'private' and user_id != TELEGRAM_USER_ID:
-        return
-        
-    if chat.type != 'private' and chat.id != -1001969921477:
-        return
-    
-    message = update.message
-    
-    # 检查群组消息是否@了机器人或者是回复bot的消息
-    if chat.type != 'private':
-        is_reply_to_bot = (
-            message.reply_to_message and 
-            message.reply_to_message.from_user and 
-            message.reply_to_message.from_user.is_bot and 
-            message.reply_to_message.from_user.username == 'rk_pin_bot'  # 替换为你的bot用户名
-        )
-        
-        if not is_reply_to_bot:
-            if not message.text or not message.entities:
-                return
-            mentioned = False
-            for entity in message.entities:
-                if entity.type == 'mention':
-                    mention_text = message.text[entity.offset:entity.offset + entity.length]
-                    if mention_text == '@rk_pin_bot':  # 替换为你的bot用户名
-                        mentioned = True
-                        break
-            if not mentioned:
-                return
-
-    try:
-        message_text = get_message_text(message)
-        
-        if not message_text:
-            await message.reply_text("无法处理此类型的消息")
-            return
-            
-        # 添加重试机制
-        max_retries = 3
-        retry_count = 0
-        reply_msg = None
-        
-        while retry_count < max_retries:
-            try:
-                if not reply_msg:
-                    reply_msg = await message.reply_text("正在处理消息...")
-                
-                last_text = ""
-                async for response_text, should_update in get_ai_response(message_text, NORMAL_PROMPT):
-                    if should_update and response_text:
-                        try:
-                            if response_text != last_text:
-                                last_text = response_text
-                                await reply_msg.edit_text(text=response_text)
-                        except Exception as e:
-                            if "message is not modified" not in str(e).lower():
-                                logger.warning(f"Failed to update message: {e}")
-                
-                if last_text:
-                    try:
-                        await reply_msg.edit_text(
-                            text=last_text,
-                        )
-                    except Exception as e:
-                        if "message is not modified" not in str(e).lower():
-                            logger.error(f"Failed to add buttons: {e}")
-                else:
-                    await reply_msg.edit_text("生成回复失败，未获得有效响应")
-                
-                break  # 成功完成，跳出重试循环
-                
-            except (NetworkError, TimedOut) as e:
-                retry_count += 1
-                logger.warning(f"Network error (attempt {retry_count}/{max_retries}): {e}")
-                if retry_count < max_retries:
-                    await asyncio.sleep(1)  # 等待1秒后重试
-                else:
-                    if reply_msg:
-                        await reply_msg.edit_text("网络错误，请稍后重试")
-                    else:
-                        await message.reply_text("网络错误，请稍后重试")
-            except Exception as e:
-                logger.error(f"Failed to generate response: {e}")
-                if reply_msg:
-                    await reply_msg.edit_text("生成回复失败，请重试")
-                break
-                    
-    except Exception as e:
-        logger.error(f"Error: {str(e)}", exc_info=True)
-        await message.reply_text("处理消息时出现错误")
+    await handler.stream_process_message(
+        get_ai_response(message_text, NORMAL_PROMPT),
+        status_msg,
+    )
 
 def get_message_text(message) -> str:
     """

@@ -31,3 +31,6 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-exp-1206")
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # 可选值: openai, gemini
+
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1002262761719")) # RKPin 频道
+GROUP_ID = int(os.getenv("GROUP_ID", "-1001969921477")) # RKPin 群组

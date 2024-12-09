@@ -1,13 +1,13 @@
 import logging
 from telegram import Update, BotCommand, BotCommandScope, BotCommandScopeAllPrivateChats, BotCommandScopeChat
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, JobQueue
 from telegram.error import NetworkError, TimedOut
 import asyncio
 from config.settings import TELEGRAM_BOT_TOKEN, HTTP_PROXY, TELEGRAM_USER_ID
 from handlers.command import start_command, get_id_command, analyze_command, summarize_command
 from handlers.conversation import handle_message
 from handlers.callback import handle_callback
-from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL
+from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL, CHANNEL_ID, GROUP_ID
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
@@ -16,6 +16,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def main() -> None:
+    # 创建 JobQueue 实例
+    job_queue = JobQueue()
+    
     application = Application.builder()\
         .token(TELEGRAM_BOT_TOKEN)\
         .proxy(HTTP_PROXY)\
@@ -24,6 +27,7 @@ def main() -> None:
         .read_timeout(30.0)\
         .write_timeout(30.0)\
         .pool_timeout(30.0)\
+        .job_queue(job_queue)\
         .build()
 
     application.add_handler(CommandHandler("start", start_command))
@@ -75,7 +79,7 @@ def main() -> None:
             # 设置管理员私聊命令
             await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID))
             # 设置群组命令
-            await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=-1001969921477))
+            await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=GROUP_ID))
             
             await app.bot.send_message(
                 chat_id=TELEGRAM_USER_ID,
