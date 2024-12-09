@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from telegram.error import NetworkError, TimedOut
 import asyncio
 from config.settings import TELEGRAM_BOT_TOKEN, HTTP_PROXY, TELEGRAM_USER_ID
-from handlers.command import start_command, get_id_command
+from handlers.command import start_command, get_id_command, analyze_command, summarize_command
 from handlers.conversation import handle_message
 from handlers.callback import handle_callback
 from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL
@@ -28,6 +28,8 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("getid", get_id_command))
+    application.add_handler(CommandHandler("analyze", analyze_command))
+    application.add_handler(CommandHandler("summarize", summarize_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(
         (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.CAPTION) & ~filters.COMMAND, 
@@ -62,17 +64,18 @@ def main() -> None:
             # 先删除所有命令
             await app.bot.delete_my_commands()
             
-            # 设置管理员私聊命令
-            await app.bot.set_my_commands([
+            # 更新命令列表
+            commands = [
                 BotCommand("start", "启动机器人"),
-                BotCommand("getid", "获取用户和群组ID")
-            ], scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID))
+                BotCommand("getid", "获取用户和群组ID"),
+                BotCommand("analyze", "分析引用的消息"),
+                BotCommand("summarize", "总结引用的消息")
+            ]
             
+            # 设置管理员私聊命令
+            await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID))
             # 设置群组命令
-            await app.bot.set_my_commands([
-                BotCommand("start", "启动机器人"),
-                BotCommand("getid", "获取用户和群组ID")
-            ], scope=BotCommandScopeChat(chat_id=-1001969921477))
+            await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=-1001969921477))
             
             await app.bot.send_message(
                 chat_id=TELEGRAM_USER_ID,
@@ -80,7 +83,9 @@ def main() -> None:
                      "✅ 机器人已启动完成\n"
                      "🔑 可用命令:\n"
                      "- /start - 启动机器人\n"
-                     "- /getid - 获取用户和群组ID\n\n"
+                     "- /getid - 获取用户和群组ID\n"
+                     "- /analyze - 分析引用的消息\n"
+                     "- /summarize - 总结引用的消息\n\n"
                      f"🔌 AI提供商: {AI_PROVIDER}\n"
                      f"🤖 AI模型: {OPENAI_MODEL if AI_PROVIDER == 'openai' else GOOGLE_MODEL}"
             )
