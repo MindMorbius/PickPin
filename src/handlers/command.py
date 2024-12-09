@@ -22,19 +22,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     if chat.type == 'private':
         if user_id == TELEGRAM_USER_ID:
-            await handler.send_message(
+            await handler.reply_to_command(
                 "👋 管理员你好！我是 PickPin 机器人\n\n"
-                "我可以帮助你处理和投稿信息到 RKPin 频道\n\n"
-                "直接发送消息给我，我会:\n"
-                "1. 智能分析内容并分类\n" 
-                "2. 生成适合发布的内容格式"
+                "我可以帮助你处理和投稿信息到 RKPin 频道\n\n",
+                auto_delete=False
             )
     elif chat.id == GROUP_ID:
-        await handler.send_message(
-            "👋 你好！我是 PickPin 机器人\n\n"
-            "你可以直接发送消息给我:\n"
-            "1. 智能分析内容并分类\n" 
-            "2. 生成适合发布的内容格式"
+        await handler.reply_to_command(
+            "👋 你好！我是 PickPin 机器人\n\n",
+            auto_delete=False
         )
 
 async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -44,13 +40,17 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     if chat.type == 'private':
         if user.id == TELEGRAM_USER_ID:
-            await handler.send_message(f"你的用户 ID 是: {user.id}")
+            await handler.reply_to_command(
+                f"你的用户 ID 是: {user.id}",
+                auto_delete=False
+            )
     elif chat.id == GROUP_ID:
-        await handler.send_message(
+        await handler.reply_to_command(
             f"群组 ID: {chat.id}\n"
             f"类型: {chat.type}\n"
             f"名称: {chat.title}\n"
-            f"你的用户 ID: {user.id}"
+            f"你的用户 ID: {user.id}",
+            auto_delete=False
         )
 
 async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -60,7 +60,11 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     
     if not message.reply_to_message:
-        await handler.send_message("请引用要分析的消息使用此命令")
+        await handler.reply_to_command(
+            "请引用要分析的消息使用此命令",
+            reply_to_message_id=message.message_id,
+            auto_delete=True
+        )
         return
         
     if chat.type == 'private':
@@ -71,20 +75,20 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     reply_text = message.reply_to_message.text or message.reply_to_message.caption
     if not reply_text:
-        await handler.send_message("无法分析此类型的消息")
+        await handler.reply_to_command(
+            "无法分析此类型的消息",
+            reply_to_message_id=message.message_id,
+            auto_delete=True
+        )
         return
 
     # 在群组中发送提示并删除
     if chat.id == GROUP_ID:
-        notify_msg = await handler.send_message(
+        await handler.reply_to_command(
             "已开始分析，请前往 @rk_pin_bot 查看",
-            reply_to_message_id=message.message_id
+            reply_to_message_id=message.message_id,
+            auto_delete=True
         )
-        if notify_msg:
-            # 10秒后删除通知和命令消息
-            await asyncio.sleep(10)
-            await handler.delete_message(notify_msg)
-            await handler.delete_message(message)
     
     try:
         last_text = ""
@@ -132,7 +136,11 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
-        await handler.send_message("分析失败，请重试", chat_id=user.id)
+        await handler.send_notification(
+            "分析失败，请重试",
+            reply_to_message_id=message.message_id,
+            auto_delete=False
+        )
 
 async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
@@ -140,7 +148,10 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     message = update.message
     
     if not message.reply_to_message:
-        await handler.send_message("请引用要总结的消息使用此命令")
+        await handler.reply_to_command(
+            "请引用要总结的消息使用此命令",
+            auto_delete=True
+        )
         return
         
     if chat.type == 'private':
@@ -151,7 +162,10 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         
     reply_text = message.reply_to_message.text or message.reply_to_message.caption
     if not reply_text:
-        await handler.send_message("无法总结此类型的消息")
+        await handler.reply_to_command(
+            "无法总结此类型的消息",
+            auto_delete=True
+        )
         return
         
     summarizing_msg = await handler.send_message("正在总结内容...")
@@ -167,4 +181,8 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await handler.edit_message(summarizing_msg, last_text)
     except Exception as e:
         logger.error(f"Summarization failed: {e}")
-        await handler.edit_message(summarizing_msg, "总结失败，请重试")
+        await handler.send_notification(
+            "总结失败，请重试",
+            reply_to_message_id=summarizing_msg.message_id,
+            auto_delete=False
+        )

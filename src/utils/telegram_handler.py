@@ -17,6 +17,8 @@ class TelegramMessageHandler:
         self.user_id = update.effective_user.id
         self.max_retries = 3
         self.retry_delay = 1  # seconds
+        self.notification_delay = 10  # seconds for auto-delete notifications
+        self.command_notification_delay = 5  # seconds for command response notifications
 
     async def send_message(
         self, 
@@ -148,3 +150,75 @@ class TelegramMessageHandler:
             fallback_text = f"{last_text}\n\n处理失败，请重试" if last_text else "处理失败，请重试"
             await self.edit_message(status_message, fallback_text)
             return None 
+
+    async def send_notification(
+        self,
+        text: str,
+        reply_to_message_id: Optional[int] = None,
+        auto_delete: bool = True,
+        delete_command: bool = False,
+        chat_id: Optional[int] = None,
+    ) -> Optional[Message]:
+        """发送通知消息，可选自动删除
+    
+        Args:
+            text: 通知文本
+            reply_to_message_id: 要回复的消息ID
+            auto_delete: 是否自动删除通知消息
+            delete_command: 是否删除触发消息（仅用于命令场景）
+            chat_id: 指定聊天ID
+        """
+        try:
+            notify_msg = await self.send_message(
+                text=text,
+                reply_to_message_id=reply_to_message_id,
+                chat_id=chat_id
+            )
+            
+            if auto_delete:
+                await asyncio.sleep(self.notification_delay)
+                if notify_msg:
+                    await self.delete_message(notify_msg)
+                if delete_command and self.message:
+                    await self.delete_message(self.message)
+                    
+            return notify_msg
+        except Exception as e:
+            logger.error(f"Failed to send notification: {e}")
+            return None
+
+    async def reply_to_command(
+        self,
+        text: str,
+        reply_to_message_id: Optional[int] = None,
+        auto_delete: bool = True,
+        delete_command: bool = True,
+        delete_delay: Optional[int] = None,
+        chat_id: Optional[int] = None,
+    ) -> Optional[Message]:
+        """专门用于回复命令的消息
+        
+        Args:
+            text: 回复文本
+            auto_delete: 是否自动删除
+            delete_delay: 自定义删除延迟时间（秒）
+        """
+        try:
+            reply_msg = await self.send_message(
+                text=text,
+                reply_to_message_id=reply_to_message_id,
+                chat_id=chat_id
+            )
+            
+            if auto_delete:
+                delay = delete_delay or self.command_notification_delay
+                await asyncio.sleep(delay)
+                if reply_msg:
+                    await self.delete_message(reply_msg)
+                if delete_command and self.message:
+                    await self.delete_message(self.message)
+                    
+            return reply_msg
+        except Exception as e:
+            logger.error(f"Failed to reply to command: {e}")
+            return None

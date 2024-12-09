@@ -63,9 +63,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     message_text = get_message_text(update.message)
     
     if not message_text:
-        await handler.send_message(
+        await handler.send_notification(
             "无法处理此类型的消息",
-            reply_to_message_id=update.message.message_id
+            reply_to_message_id=update.message.message_id,
+            auto_delete=True
         )
         return
     

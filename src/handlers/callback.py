@@ -48,12 +48,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         chat_id=CHANNEL_ID
                     )
                     
-                await handler.send_message("投稿成功!")
+                await handler.send_notification("投稿成功!", auto_delete=True)
             else:
-                await handler.send_message("未找到内容，无法投稿")
+                await handler.send_notification("未找到内容，无法投稿", auto_delete=True)
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
-            await handler.send_message("投稿失败，请重试")
+            await handler.send_notification("投稿失败，请重试", auto_delete=True)
 
     elif query.data.startswith('prompt_'):
         prompt_type = query.data.replace('prompt_', '')
@@ -93,7 +93,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     )
                 except Exception as e:
                     logger.error(f"Failed to generate content: {e}")
-                    await handler.edit_message(generation_message, "生成内容失败，请重试")
+                    await handler.send_notification(
+                        "生成内容失败，请重试",
+                        reply_to_message_id=generation_message.message_id,
+                        auto_delete=True
+                    )
 
     elif query.data == 'delete_message':
         await query.message.delete()
@@ -108,7 +112,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         generated_content = query.message.text
         
         if not all([original_message, classification_result, generated_content]):
-            await query.message.edit_text("无法发起投票，信息已失效")
+            await handler.send_notification(
+                "无法发起投票，信息已失效",
+                reply_to_message_id=query.message.message_id
+            )
             return
             
         # 在群组中发起投票
@@ -120,11 +127,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             chat_id=GROUP_ID
         )
         
-        # 保存投票相关信息
+        # 保存投票相关信息到 chat_data
         context.chat_data['votes'] = {'up': 0, 'down': 0, 'voters': set()}
         context.chat_data['vote_message'] = vote_msg
         context.chat_data['vote_content'] = generated_content
         context.chat_data['vote_initiator'] = query.from_user.id
+        context.chat_data['original_message'] = original_message  # 新增：保存原始消息
         
         # 设置定时器
         context.job_queue.run_once(
@@ -153,12 +161,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
         if query.data == 'admin_approve':
             try:
-                # 从消息中获取原始消息
-                original_message = query.message.reply_to_message
+                # 从 chat_data 获取数据
+                original_message = context.chat_data.get('original_message')
                 generated_content = context.chat_data.get('vote_content')
                 
                 if not all([original_message, generated_content]):
-                    logger.error("Missing required data for publishing")
+                    await handler.send_notification(
+                        "投稿数据已失效，请重新发起投稿",
+                        reply_to_message_id=query.message.message_id
+                    )
                     return
                     
                 # 转发原始消息到频道
@@ -186,12 +197,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     )
             except Exception as e:
                 logger.error(f"Failed to publish content: {e}")
+                await handler.send_notification(
+                    "发布内容失败，请重试",
+                    reply_to_message_id=query.message.message_id
+                )
         else:
             user_id = context.chat_data.get('vote_initiator')
             if user_id:
-                await context.bot.send_message(
+                await context.bot.send_notification(
                     chat_id=user_id,
-                    text="感谢你的投稿，虽然没成功，不是你的问题哦"
+                    text="感谢你的投稿，虽然没成功，不是你的问题哦",
+                    auto_delete=False
                 )
                 
         # 清理投票消息
@@ -244,9 +260,10 @@ async def check_vote_result(context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         # 投票未通过，通知用户
-        await context.bot.send_message(
+        await context.bot.send_notification(
             chat_id=data['user_id'],
-            text="感谢你的投稿，虽然没成功，但是不是你的问题哦"
+            text="感谢你的投稿，虽然没成功，但是不是你的问题哦",
+            auto_delete=False
         )
     
     # 清理投票消息
