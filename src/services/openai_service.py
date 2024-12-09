@@ -7,7 +7,7 @@ client = OpenAI(
     base_url=OPENAI_BASE_URL
 )
 
-async def get_ai_response(message: str, system_prompt: str):
+async def get_openai_response(message: str, system_prompt: str):
     stream = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[

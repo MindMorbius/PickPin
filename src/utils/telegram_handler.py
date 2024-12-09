@@ -59,7 +59,9 @@ class TelegramMessageHandler:
         while retry_count < self.max_retries:
             try:
                 # 检查是否需要更新
-                if message.text == text and message.reply_markup == reply_markup:
+                if (message.text == text and 
+                    message.reply_markup == reply_markup and 
+                    message.parse_mode == parse_mode):
                     logger.info("No changes detected, skipping update.")
                     return True
 
