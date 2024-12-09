@@ -11,6 +11,7 @@ from utils.buttons import (
 from prompts.prompts import TECH_PROMPT, NEWS_PROMPT, CULTURE_PROMPT, KNOWLEDGE_PROMPT, CHAT_PROMPT
 from utils.telegram_handler import TelegramMessageHandler
 import re
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +73,27 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not reply_text:
         await handler.send_message("无法分析此类型的消息")
         return
-        
-    analyzing_msg = await handler.send_message("正在分析内容...")
-    if not analyzing_msg:
-        return
+
+    # 在群组中发送提示并删除
+    if chat.id == GROUP_ID:
+        notify_msg = await handler.send_message(
+            "已开始分析，请前往 @rk_pin_bot 查看",
+            reply_to_message_id=message.message_id
+        )
+        if notify_msg:
+            # 10秒后删除通知和命令消息
+            await asyncio.sleep(10)
+            await handler.delete_message(notify_msg)
+            await handler.delete_message(message)
     
     try:
         last_text = ""
         prompt_type = None
+        analyzing_msg = await handler.send_message(
+            "正在分析内容...",
+            chat_id=user.id
+        )
+        
         async for classification_text, should_update in get_ai_response(reply_text, CLASSIFY_PROMPT):
             if should_update:
                 last_text = classification_text
@@ -118,7 +132,7 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
-        await handler.edit_message(analyzing_msg, "分析失败，请重试")
+        await handler.send_message("分析失败，请重试", chat_id=user.id)
 
 async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)

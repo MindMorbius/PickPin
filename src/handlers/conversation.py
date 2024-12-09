@@ -17,13 +17,62 @@ logger = logging.getLogger(__name__)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
     
+    logger.info(f"Received message: {update}")
+
+    if update.message.forward_signature == 'RKPin Bot':
+        logger.info(f"不回复bot消息")
+        return
+    
+    if update.message.is_automatic_forward:
+        logger.info(f"不回复自动转发消息")
+        return
+    
+    user_id = update.effective_user.id
+    chat = update.effective_chat
+    
+    if chat.type == 'private' and user_id != TELEGRAM_USER_ID:
+        return
+        
+    if chat.type != 'private' and chat.id != GROUP_ID:
+        return
+
+    # 群组消息处理
+    if chat.id == GROUP_ID:
+        # 检查是否@bot或引用bot消息
+        is_mention = False
+        is_reply_to_bot = False
+        
+        # 检查@提及
+        if update.message.entities:
+            for entity in update.message.entities:
+                if entity.type == 'mention':
+                    mention = update.message.text[entity.offset:entity.offset + entity.length]
+                    if mention == '@rk_pin_bot':
+                        is_mention = True
+                        break
+        
+        # 检查是否回复bot消息
+        if update.message.reply_to_message and update.message.reply_to_message.from_user:
+            if update.message.reply_to_message.from_user.username == 'rk_pin_bot':
+                is_reply_to_bot = True
+        
+        # 如果既没有@bot也没有回复bot消息，则不处理
+        if not (is_mention or is_reply_to_bot):
+            return
+
     message_text = get_message_text(update.message)
     
     if not message_text:
-        await handler.send_message("无法处理此类型的消息")
+        await handler.send_message(
+            "无法处理此类型的消息",
+            reply_to_message_id=update.message.message_id
+        )
         return
     
-    status_msg = await handler.send_message("正在处理消息...")
+    status_msg = await handler.send_message(
+        "正在处理消息...",
+        reply_to_message_id=update.message.message_id
+    )
     if not status_msg:
         return
     
