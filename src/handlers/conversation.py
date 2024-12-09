@@ -26,12 +26,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     
     user_id = update.effective_user.id
-    if user_id != TELEGRAM_USER_ID:
-        await update.message.reply_text(
-            "抱歉，您没有使用此机器人的权限。",
-            reply_to_message_id=update.message.message_id
-        )
+    chat = update.effective_chat
+    
+    if chat.type == 'private' and user_id != TELEGRAM_USER_ID:
         return
+        
+    if chat.type != 'private' and chat.id != -1001969921477:
+        return
+    
     message = update.message
 
     try:
@@ -185,7 +187,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"使用{prompt_name.split('_')[0]}解释器生成内容中...\n[{prompt_name}]"
                 )
                 
-                last_text = ""  # 跟踪上一次发送的文本
+                last_text = ""  # 跟踪上一次��送的文本
                 async for content_text, should_update in get_ai_response(message_text, prompt):
                     if should_update and content_text != last_text:  # 只在内容变化时更新
                         try:
