@@ -26,9 +26,15 @@ class TelegramMessageHandler:
         reply_to_message_id: Optional[int] = None,
         reply_markup: Optional[InlineKeyboardMarkup] = None,
         parse_mode: Optional[str] = None,
-        chat_id: Optional[int] = None
+        chat_id: Optional[int] = None,
+        delete_command: bool = False
+
     ) -> Optional[Message]:
         """发送消息，带重试机制"""
+
+        if delete_command and self.message:
+            await self.delete_message(self.message)
+        
         retry_count = 0
         while retry_count < self.max_retries:
             try:

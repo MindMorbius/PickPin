@@ -1,6 +1,6 @@
 import logging
 from telegram import Update, BotCommand, BotCommandScope, BotCommandScopeAllPrivateChats, BotCommandScopeChat
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, JobQueue
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, JobQueue, PollHandler
 from telegram.error import NetworkError, TimedOut
 import asyncio
 from config.settings import TELEGRAM_BOT_TOKEN, HTTP_PROXY, TELEGRAM_USER_ID
@@ -83,6 +83,7 @@ def main() -> None:
             
             await app.bot.send_message(
                 chat_id=TELEGRAM_USER_ID,
+                parse_mode='Markdown',
                 text="🤖 PickPin - 为RKPin频道提供信息处理和投稿服务\n\n"
                      "✅ 机器人已启动完成\n"
                      "🔑 可用命令:\n"

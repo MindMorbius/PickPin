@@ -13,12 +13,13 @@ client = OpenAI(
 
 async def get_gemini_response(message: str, system_prompt: str):
     max_retries = 3
-    base_delay = 1  # 初始延迟1秒
+    base_delay = 1
+    current_model = GOOGLE_MODEL
     
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model=GOOGLE_MODEL,
+                model=current_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message}
@@ -28,13 +29,18 @@ async def get_gemini_response(message: str, system_prompt: str):
             
             async for text, update in stream_response(response):
                 yield text, update
-            return  # 成功则退出
+            return
             
         except Exception as e:
-            delay = base_delay * (2 ** attempt)  # 指数退避
+            if "429" in str(e) and current_model == GOOGLE_MODEL:
+                logger.info(f"Quota exceeded for {current_model}, switching to gemini-1.5-flash")
+                current_model = "gemini-1.5-flash"
+                continue
+                
+            delay = base_delay * (2 ** attempt)
             logger.warning(f"Attempt {attempt + 1} failed: {str(e)}. Retrying in {delay} seconds...")
             
-            if attempt < max_retries - 1:  # 如果不是最后一次尝试
+            if attempt < max_retries - 1:
                 await asyncio.sleep(delay)
                 continue
             else:

@@ -101,7 +101,7 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         async for classification_text, should_update in get_ai_response(reply_text, CLASSIFY_PROMPT):
             if should_update:
                 last_text = classification_text
-                await handler.edit_message(analyzing_msg, classification_text)
+                await handler.edit_message(analyzing_msg, classification_text, parse_mode='Markdown')
                 if 'TECH_PROMPT' in classification_text:
                     selected_prompt = TECH_PROMPT
                 elif 'NEWS_PROMPT' in classification_text:
@@ -126,12 +126,13 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         async for content_text, should_update in get_ai_response(reply_text, selected_prompt):
             if should_update:
                 generated_text = content_text
-                await handler.edit_message(generation_msg, content_text)
+                await handler.edit_message(generation_msg, content_text, parse_mode='Markdown')
         
         await handler.edit_message(
             generation_msg,
             generated_text,
-            reply_markup=get_content_options_buttons()
+            reply_markup=get_content_options_buttons(),
+            parse_mode='Markdown'
         )
         
     except Exception as e:
@@ -151,6 +152,7 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not message.reply_to_message:
         await handler.reply_to_command(
             "请引用要总结的消息使用此命令",
+            reply_to_message_id=message.message_id,
             auto_delete=True
         )
         return
@@ -165,26 +167,27 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not reply_text:
         await handler.reply_to_command(
             "无法总结此类型的消息",
+            reply_to_message_id=message.message_id,
             auto_delete=True
         )
         return
         
-    summarizing_msg = await handler.send_message("正在总结内容...")
+    summarizing_msg = await handler.send_message("正在总结内容...", reply_to_message_id=message.reply_to_message.message_id, delete_command=True)
     
     try:
         last_text = ""
         async for summary_text, should_update in get_ai_response(reply_text, SUMMARY_PROMPT):
             if should_update and summary_text != last_text:
                 last_text = summary_text
-                await handler.edit_message(summarizing_msg, summary_text)
+                await handler.edit_message(summarizing_msg, summary_text, parse_mode='Markdown')
                     
         if last_text != summarizing_msg.text:
-            await handler.edit_message(summarizing_msg, last_text)
+            await handler.edit_message(summarizing_msg, last_text, parse_mode='Markdown')
     except Exception as e:
         logger.error(f"Summarization failed: {e}")
         await handler.send_notification(
             "总结失败，请重试",
             chat_id=user.id,
-            reply_to_message_id=summarizing_msg.message_id,
+            reply_to_message_id=message.message_id,
             auto_delete=False
         )
