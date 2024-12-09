@@ -138,6 +138,7 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"Analysis failed: {e}")
         await handler.send_notification(
             "分析失败，请重试",
+            chat_id=user.id,
             reply_to_message_id=message.message_id,
             auto_delete=False
         )
@@ -183,6 +184,7 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         logger.error(f"Summarization failed: {e}")
         await handler.send_notification(
             "总结失败，请重试",
+            chat_id=user.id,
             reply_to_message_id=summarizing_msg.message_id,
             auto_delete=False
         )

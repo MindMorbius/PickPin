@@ -9,13 +9,9 @@ def get_content_options_buttons():
         ]
     ])
 
-def get_vote_buttons(up_votes=0, down_votes=0):
-    """获取投票按钮 (赞成/反对/管理员操作)"""
+def get_vote_buttons():
+    """获取投票按钮 (仅管理员操作)"""
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(f"赞成 ({up_votes})", callback_data='vote_up'),
-            InlineKeyboardButton(f"反对 ({down_votes})", callback_data='vote_down')
-        ],
         [
             InlineKeyboardButton("管理员同意", callback_data='admin_approve'),
             InlineKeyboardButton("管理员拒绝", callback_data='admin_reject')

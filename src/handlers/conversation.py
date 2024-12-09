@@ -19,11 +19,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     logger.info(f"Received message: {update}")
 
-    if update.message.forward_signature == 'RKPin Bot':
+    # 获取消息对象，优先使用 edited_message
+    message = update.edited_message or update.message
+    if not message:
+        return
+
+    if message.forward_signature == 'RKPin Bot':
         logger.info(f"不回复bot消息")
         return
     
-    if update.message.is_automatic_forward:
+    if message.is_automatic_forward:
         logger.info(f"不回复自动转发消息")
         return
     
@@ -43,36 +48,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         is_reply_to_bot = False
         
         # 检查@提及
-        if update.message.entities:
-            for entity in update.message.entities:
+        if message.entities:
+            for entity in message.entities:
                 if entity.type == 'mention':
-                    mention = update.message.text[entity.offset:entity.offset + entity.length]
+                    mention = message.text[entity.offset:entity.offset + entity.length]
                     if mention == '@rk_pin_bot':
                         is_mention = True
                         break
         
         # 检查是否回复bot消息
-        if update.message.reply_to_message and update.message.reply_to_message.from_user:
-            if update.message.reply_to_message.from_user.username == 'rk_pin_bot':
+        if message.reply_to_message and message.reply_to_message.from_user:
+            if message.reply_to_message.from_user.username == 'rk_pin_bot':
                 is_reply_to_bot = True
         
         # 如果既没有@bot也没有回复bot消息，则不处理
         if not (is_mention or is_reply_to_bot):
             return
 
-    message_text = get_message_text(update.message)
+    message_text = get_message_text(message)
     
     if not message_text:
         await handler.send_notification(
             "无法处理此类型的消息",
-            reply_to_message_id=update.message.message_id,
+            reply_to_message_id=message.message_id,
             auto_delete=True
         )
         return
     
     status_msg = await handler.send_message(
         "正在处理消息...",
-        reply_to_message_id=update.message.message_id
+        reply_to_message_id=message.message_id
     )
     if not status_msg:
         return
