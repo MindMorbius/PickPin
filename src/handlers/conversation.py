@@ -30,8 +30,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # 1. 过滤自动转发和机器人消息
-    if message.is_automatic_forward or message.forward_signature == 'RKPin Bot':
-        logger.info("Skipping automatic forward or bot message")
+    if message.is_automatic_forward:
+        logger.info("Skipping automatic forward message")
         return
 
     chat = message.chat

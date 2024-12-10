@@ -89,13 +89,23 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_to_message_id=message.message_id,
             auto_delete=True
         )
+        
+        # 转发原文到私聊
+        forwarded = await handler.forward_message(
+            user.id,
+            message.reply_to_message
+        )
+        if not forwarded:
+            return
+        
     
     try:
         last_text = ""
         prompt_type = None
         analyzing_msg = await handler.send_message(
             "正在分析内容...",
-            chat_id=user.id
+            chat_id=user.id,
+            reply_to_message_id=forwarded.message_id
         )
         
         async for classification_text, should_update in get_ai_response(reply_text, CLASSIFY_PROMPT):
@@ -128,7 +138,8 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         generated_text = ""
         generation_msg = await handler.send_message(
             "正在生成内容...",
-            chat_id=user.id
+            chat_id=user.id,
+            reply_to_message_id=forwarded.message_id
         )
         
         async for content_text, should_update in get_ai_response(reply_text, selected_prompt):

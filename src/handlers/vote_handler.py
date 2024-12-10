@@ -33,8 +33,8 @@ class VoteHandler:
                 f"(@{self.handler.update.effective_user.username}) 发起了投稿"
             ).replace('\n\n\n', '\n\n')
 
-            # 发送投票，1小时后自动关闭
-            return await self.handler.bot.send_poll(
+            # 发送投票，24小时后自动关闭
+            vote_message = await self.handler.bot.send_poll(
                 chat_id=GROUP_ID,
                 question=vote_text,
                 options=["👍 同意", "👎 反对"],
@@ -46,6 +46,30 @@ class VoteHandler:
                 explanation=generated_content,
                 explanation_parse_mode='HTML'
             )
+
+            # 添加投票消息ID到context
+            context.chat_data['vote_message_id'] = vote_message.message_id
+
+            # 记录投票日志
+            vote_log_data = {
+                "vote_id": vote_message.message_id,
+                "initiator": {
+                    "id": self.handler.user_id,
+                    "username": self.handler.update.effective_user.username,
+                    "first_name": self.handler.update.effective_user.first_name
+                },
+                "original_message": {
+                    "id": original_message.message_id,
+                    "chat_id": original_message.chat_id
+                },
+                "classification": classification_result,
+                "content": generated_content,
+                "status": "started",
+                "duration": self.vote_duration
+            }
+            self.handler.log_handler.log_vote(vote_log_data)
+
+            return vote_message
 
         except Exception as e:
             logger.error(f"Failed to start vote: {e}")
@@ -59,6 +83,14 @@ class VoteHandler:
     async def admin_approve(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         """管理员强制通过"""
         try:
+            vote_message_id = context.chat_data.get('vote_message_id')
+            vote_log_data = {
+                "vote_id": vote_message_id,
+                "status": "admin_approved",
+                "admin_id": self.handler.user_id
+            }
+            self.handler.log_handler.log_vote(vote_log_data)
+            
             await self._publish_content(context)
             context.chat_data.clear()
         except Exception as e:
@@ -67,6 +99,14 @@ class VoteHandler:
     async def admin_reject(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         """管理员强制拒绝"""
         try:
+            vote_message_id = context.chat_data.get('vote_message_id')
+            vote_log_data = {
+                "vote_id": vote_message_id,
+                "status": "admin_rejected",
+                "admin_id": self.handler.user_id
+            }
+            self.handler.log_handler.log_vote(vote_log_data)
+            
             await self._reject_content(context)
             context.chat_data.clear()
         except Exception as e:
@@ -91,16 +131,28 @@ class VoteHandler:
 
             if forwarded:
                 try:
+                    # 发送生成的内容
                     await context.bot.send_message(
                         chat_id=CHANNEL_ID,
                         text=generated_content,
                         reply_to_message_id=forwarded.message_id,
                         parse_mode='Markdown'
                     )
-                except Exception:
+                    
+                    # 通知投稿者
+                    user_id = context.chat_data.get('vote_initiator')
+                    if user_id:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text="✨ 恭喜！你的投稿已通过并发布"
+                        )
+                except Exception as e:
+                    logger.error(f"Error sending content: {e}")
+                    # 发送失败时的降级处理
                     await context.bot.send_message(
                         chat_id=CHANNEL_ID,
                         text=generated_content,
+                        parse_mode=None,
                         reply_to_message_id=forwarded.message_id
                     )
 

@@ -16,6 +16,7 @@ class LogHandler:
         self.date = datetime.now().strftime("%Y-%m-%d")
         self.message_log_file = self.log_dir / f"messages_{self.date}.jsonl"
         self.bot_log_file = self.log_dir / f"bot_{self.date}.jsonl"
+        self.vote_log_file = self.log_dir / f"votes_{self.date}.jsonl"
 
     def _write_log(self, data: Dict[str, Any], log_file: Path) -> None:
         try:
@@ -45,4 +46,12 @@ class LogHandler:
             }
             self._write_log(log_data, self.bot_log_file)
         except Exception as e:
-            logger.error(f"Failed to log bot action: {e}") 
+            logger.error(f"Failed to log bot action: {e}")
+
+    def log_vote(self, vote_data: Dict[str, Any]) -> None:
+        """记录投票信息"""
+        try:
+            vote_data["timestamp"] = datetime.now().isoformat()
+            self._write_log(vote_data, self.vote_log_file)
+        except Exception as e:
+            logger.error(f"Failed to log vote: {e}") 

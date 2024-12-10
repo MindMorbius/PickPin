@@ -136,7 +136,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         vote_handler = VoteHandler(handler)
-        if query.data == 'admin_approve':
-            await vote_handler.admin_approve(context)
-        else:
-            await vote_handler.admin_reject(context)
+        try:
+            # 停止投票
+            vote_message_id = context.chat_data.get('vote_message_id')
+            if vote_message_id:
+                await context.bot.stop_poll(GROUP_ID, vote_message_id)
+            
+            if query.data == 'admin_approve':
+                await vote_handler.admin_approve(context)
+                await query.message.edit_text(
+                    f"{query.message.text}\n\n✅ 管理员已通过",
+                    reply_markup=None
+                )
+            else:
+                await vote_handler.admin_reject(context)
+                await query.message.edit_text(
+                    f"{query.message.text}\n\n❌ 管理员已拒绝",
+                    reply_markup=None
+                )
+        except Exception as e:
+            logger.error(f"Failed to handle admin action: {e}")
+            await handler.send_notification(
+                "操作失败，请重试",
+                auto_delete=True
+            )
