@@ -14,7 +14,7 @@ def escape_markdown(text: str) -> str:
 
 async def get_ai_response(message: str, system_prompt: str):
     # 添加 Markdown V2 格式要求
-    system_prompt = system_prompt + " 严格使用Markdown V2语法格式输出"
+    system_prompt = system_prompt
     accumulated_text = ""
     
     if AI_PROVIDER == "gemini":

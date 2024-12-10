@@ -4,6 +4,7 @@ from telegram.error import NetworkError, TimedOut
 import logging
 import asyncio
 from typing import Optional, Tuple, AsyncGenerator, Any
+from handlers.log_handler import LogHandler
 
 logger = logging.getLogger(__name__)
 
@@ -13,12 +14,14 @@ class TelegramMessageHandler:
         self.context = context
         self.bot = context.bot
         self.message = update.effective_message
-        self.chat_id = update.effective_chat.id
-        self.user_id = update.effective_user.id
+        self.chat_id = self.message.chat.id if self.message else None
+        # 只在非频道消息时获取用户ID
+        self.user_id = update.effective_user.id if update.effective_user else None
         self.max_retries = 3
         self.retry_delay = 1  # seconds
         self.notification_delay = 10  # seconds for auto-delete notifications
         self.command_notification_delay = 5  # seconds for command response notifications
+        self.log_handler = LogHandler()
 
     async def send_message(
         self, 
@@ -27,7 +30,8 @@ class TelegramMessageHandler:
         reply_markup: Optional[InlineKeyboardMarkup] = None,
         parse_mode: Optional[str] = None,
         chat_id: Optional[int] = None,
-        delete_command: bool = False
+        delete_command: bool = False,
+        log_action: bool = True
 
     ) -> Optional[Message]:
         """发送消息，带重试机制"""
@@ -38,13 +42,16 @@ class TelegramMessageHandler:
         retry_count = 0
         while retry_count < self.max_retries:
             try:
-                return await self.bot.send_message(
+                sent_message = await self.bot.send_message(
                     chat_id=chat_id or self.chat_id,
                     text=text,
                     reply_to_message_id=reply_to_message_id,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode
                 )
+                if sent_message and log_action:
+                    self.log_handler.log_bot_action("send", sent_message, self.update)
+                return sent_message
             except (NetworkError, TimedOut) as e:
                 retry_count += 1
                 if retry_count == self.max_retries:
@@ -73,11 +80,13 @@ class TelegramMessageHandler:
                     logger.info("No changes detected, skipping update.")
                     return True
 
-                await message.edit_text(
+                edited_message = await message.edit_text(
                     text=text,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode
                 )
+                if edited_message:
+                    self.log_handler.log_bot_action("edit", edited_message, self.update)
                 return True
             except (NetworkError, TimedOut) as e:
                 retry_count += 1
@@ -178,7 +187,8 @@ class TelegramMessageHandler:
             notify_msg = await self.send_message(
                 text=text,
                 reply_to_message_id=reply_to_message_id,
-                chat_id=chat_id
+                chat_id=chat_id,
+                log_action=False
             )
             
             if auto_delete:
@@ -213,7 +223,8 @@ class TelegramMessageHandler:
             reply_msg = await self.send_message(
                 text=text,
                 reply_to_message_id=reply_to_message_id,
-                chat_id=chat_id
+                chat_id=chat_id,
+                log_action=False
             )
             
             if auto_delete:

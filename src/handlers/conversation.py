@@ -16,33 +16,40 @@ logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
-    
     logger.info(f"Received message: {update}")
 
-    # 获取消息对象，优先使用 edited_message
+    # 直接跳过频道消息
+    if update.channel_post or update.edited_channel_post:
+        logger.info("Skipping channel post")
+        return
+
+    # 获取消息对象
     message = update.edited_message or update.message
     if not message:
+        logger.info("Skipping invalid message")
         return
 
-    if message.forward_signature == 'RKPin Bot':
-        logger.info(f"不回复bot消息")
-        return
-    
-    if message.is_automatic_forward:
-        logger.info(f"不回复自动转发消息")
-        return
-    
-    user_id = update.effective_user.id
-    chat = update.effective_chat
-    
-    if chat.type == 'private' and user_id != TELEGRAM_USER_ID:
-        return
-        
-    if chat.type != 'private' and chat.id != GROUP_ID:
+    # 1. 过滤自动转发和机器人消息
+    if message.is_automatic_forward or message.forward_signature == 'RKPin Bot':
+        logger.info("Skipping automatic forward or bot message")
         return
 
-    # 群组消息处理
+    chat = message.chat
+    
+    # 2. 私聊消息只接收管理员
+    if chat.type == 'private':
+        if not update.effective_user or update.effective_user.id != TELEGRAM_USER_ID:
+            logger.info("Skipping non-admin private message")
+            return
+    
+    # 3. 非私聊只接收指定群组消息
+    elif chat.id != GROUP_ID:
+        logger.info("Skipping message from non-target group")
+        return
+    
+        # 群组消息处理
     if chat.id == GROUP_ID:
+        handler.log_handler.log_message(update)
         # 检查是否@bot或引用bot消息
         is_mention = False
         is_reply_to_bot = False

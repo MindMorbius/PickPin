@@ -100,8 +100,16 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         async for classification_text, should_update in get_ai_response(reply_text, CLASSIFY_PROMPT):
             if should_update:
-                last_text = classification_text
-                await handler.edit_message(analyzing_msg, classification_text, parse_mode='Markdown')
+                try:
+                    # 尝试清理和修复 Markdown
+                    cleaned_text = classification_text.replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
+                    await handler.edit_message(analyzing_msg, cleaned_text, parse_mode='Markdown')
+                    last_text = cleaned_text
+                except Exception as e:
+                    # 如果 Markdown 解析失败，尝试不使用解析发送
+                    await handler.edit_message(analyzing_msg, classification_text, parse_mode=None)
+                    last_text = classification_text
+                
                 if 'TECH_PROMPT' in classification_text:
                     selected_prompt = TECH_PROMPT
                 elif 'NEWS_PROMPT' in classification_text:
@@ -125,8 +133,13 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         async for content_text, should_update in get_ai_response(reply_text, selected_prompt):
             if should_update:
-                generated_text = content_text
-                await handler.edit_message(generation_msg, content_text, parse_mode='Markdown')
+                try:
+                    cleaned_text = content_text.replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
+                    await handler.edit_message(generation_msg, cleaned_text, parse_mode='Markdown')
+                    generated_text = cleaned_text
+                except Exception as e:
+                    await handler.edit_message(generation_msg, content_text, parse_mode=None)
+                    generated_text = content_text
         
         await handler.edit_message(
             generation_msg,
