@@ -8,6 +8,7 @@ from handlers.command import start_command, get_id_command, analyze_command, sum
 from handlers.conversation import handle_message
 from handlers.callback import handle_callback
 from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL, CHANNEL_ID, GROUP_ID
+from database.message_db import MessageDB
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
@@ -64,38 +65,41 @@ def main() -> None:
 
     async def post_init(app: Application) -> None:
         logger.info("Bot is starting up...")
-        try:
-            # 先删除所有命令
-            await app.bot.delete_my_commands()
-            
-            # 更新命令列表
-            commands = [
-                BotCommand("start", "启动机器人"),
-                BotCommand("getid", "获取用户和群组ID"),
-                BotCommand("analyze", "分析引用的消息"),
-                BotCommand("summarize", "总结引用的消息")
-            ]
-            
-            # 设置管理员私聊命令
-            await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID))
-            # 设置群组命令
-            await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=GROUP_ID))
-            
-            await app.bot.send_message(
-                chat_id=TELEGRAM_USER_ID,
-                parse_mode='Markdown',
-                text="🤖 PickPin - 为RKPin频道提供信息处理和投稿服务\n\n"
-                     "✅ 机器人已启动完成\n"
-                     "🔑 可用命令:\n"
-                     "- /start - 启动机器人\n"
-                     "- /getid - 获取用户和群组ID\n"
-                     "- /analyze - 分析引用的消息\n"
-                     "- /summarize - 总结引用的消息\n\n"
-                     f"🔌 AI提供商: {AI_PROVIDER}\n"
-                     f"🤖 AI模型: {OPENAI_MODEL if AI_PROVIDER == 'openai' else GOOGLE_MODEL}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to send startup message: {e}")
+        
+        # 初始化消息数据库
+        message_db = MessageDB()
+        await message_db.init()
+        app.bot_data['message_db'] = message_db
+        
+        # 先删除所有命令
+        await app.bot.delete_my_commands()
+        
+        # 更新命令列表
+        commands = [
+            BotCommand("start", "启动机器人"),
+            BotCommand("getid", "获取用户和群组ID"),
+            BotCommand("analyze", "分析引用的消息"),
+            BotCommand("summarize", "总结引用的消息")
+        ]
+        
+        # 设置管理员私聊命令
+        await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID))
+        # 设置群组命令
+        await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=GROUP_ID))
+        
+        await app.bot.send_message(
+            chat_id=TELEGRAM_USER_ID,
+            parse_mode='Markdown',
+            text="🤖 PickPin - 为RKPin频道提供信息处理和投稿服务\n\n"
+                 "✅ 机器人已启动完成\n"
+                 "🔑 可用命令:\n"
+                 "- /start - 启动机器人\n"
+                 "- /getid - 获取用户和群组ID\n"
+                 "- /analyze - 分析引用的消息\n"
+                 "- /summarize - 总结引用的消息\n\n"
+                 f"🔌 AI提供商: {AI_PROVIDER}\n"
+                 f"🤖 AI模型: {OPENAI_MODEL if AI_PROVIDER == 'openai' else GOOGLE_MODEL}"
+        )
     
     application.post_init = post_init
     

@@ -29,6 +29,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.info("Skipping invalid message")
         return
 
+    # 保存或更新用户消息
+    message_data = {
+        'message_id': message.message_id,
+        'chat_id': message.chat.id,
+        'user_id': message.from_user.id,
+        'text': message.text or message.caption,
+        'type': 'user_message',
+        'reply_to_message_id': message.reply_to_message.message_id if message.reply_to_message else None,
+        'metadata': {
+            'username': message.from_user.username,
+            'first_name': message.from_user.first_name,
+            'is_edited': update.edited_message is not None
+        }
+    }
+    await context.bot_data['message_db'].save_message(message_data)
+
     # 1. 过滤自动转发和机器人消息
     if message.is_automatic_forward:
         logger.info("Skipping automatic forward message")
@@ -47,7 +63,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.info("Skipping message from non-target group")
         return
     
-        # 群组消息处理
+    # 群组消息处理
     if chat.id == GROUP_ID:
         handler.log_handler.log_message(update)
         # 检查是否@bot或引用bot消息
