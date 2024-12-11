@@ -10,84 +10,37 @@ import asyncio
 import re
 from telegram.error import NetworkError, TimedOut
 from utils.telegram_handler import TelegramMessageHandler
+from utils.response_controller import ResponseController
 
 
 logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
-    logger.info(f"Received message: {update}")
-
-    # 直接跳过频道消息
-    if update.channel_post or update.edited_channel_post:
-        logger.info("Skipping channel post")
-        return
-
-    # 获取消息对象
-    message = update.edited_message or update.message
-    if not message:
-        logger.info("Skipping invalid message")
-        return
 
     # 保存或更新用户消息
+    message = update.effective_message
     message_data = {
         'message_id': message.message_id,
         'chat_id': message.chat.id,
-        'user_id': message.from_user.id,
+        'user_id': message.from_user.id if message.from_user else None,
         'text': message.text or message.caption,
         'type': 'user_message',
         'reply_to_message_id': message.reply_to_message.message_id if message.reply_to_message else None,
-        'metadata': {
-            'username': message.from_user.username,
-            'first_name': message.from_user.first_name,
-            'is_edited': update.edited_message is not None
-        }
+        'metadata': update.to_dict()
     }
+    
     await context.bot_data['message_db'].save_message(message_data)
 
-    # 1. 过滤自动转发和机器人消息
-    if message.is_automatic_forward:
-        logger.info("Skipping automatic forward message")
+    response_controller = ResponseController()
+    
+    # 分析消息并获取响应状态
+    should_respond, chat_type, is_update = response_controller.analyze_update(update, context)
+    logger.info(f"should_respond: {should_respond}, chat_type: {chat_type}, is_update: {is_update}")
+    
+    if not should_respond:
         return
-
-    chat = message.chat
-    
-    # 2. 私聊消息只接收管理员
-    if chat.type == 'private':
-        if not update.effective_user or update.effective_user.id != TELEGRAM_USER_ID:
-            logger.info("Skipping non-admin private message")
-            return
-    
-    # 3. 非私聊只接收指定群组消息
-    elif chat.id != GROUP_ID:
-        logger.info("Skipping message from non-target group")
-        return
-    
-    # 群组消息处理
-    if chat.id == GROUP_ID:
-        handler.log_handler.log_message(update)
-        # 检查是否@bot或引用bot消息
-        is_mention = False
-        is_reply_to_bot = False
         
-        # 检查@提及
-        if message.entities:
-            for entity in message.entities:
-                if entity.type == 'mention':
-                    mention = message.text[entity.offset:entity.offset + entity.length]
-                    if mention == '@rk_pin_bot':
-                        is_mention = True
-                        break
-        
-        # 检查是否回复bot消息
-        if message.reply_to_message and message.reply_to_message.from_user:
-            if message.reply_to_message.from_user.username == 'rk_pin_bot':
-                is_reply_to_bot = True
-        
-        # 如果既没有@bot也没有回复bot消息，则不处理
-        if not (is_mention or is_reply_to_bot):
-            return
-
     message_text = get_message_text(message)
     
     if not message_text:

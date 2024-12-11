@@ -15,12 +15,26 @@ from utils.buttons import (
     get_vote_buttons
 )
 from handlers.vote_handler import VoteHandler
+from utils.response_controller import ResponseController
 
 logger = logging.getLogger(__name__)
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
+    response_controller = ResponseController()
     query = update.callback_query
+    
+    # 检查用户权限
+    if query.data in ['admin_approve', 'admin_reject']:
+        if not response_controller.is_user_admin(query.from_user.id):
+            await query.answer("仅管理员可操作", show_alert=True)
+            return
+    
+    # 检查用户是否在黑名单
+    if response_controller.is_user_blacklisted(query.from_user.id):
+        await query.answer("你已被禁止使用此功能", show_alert=True)
+        return
+        
     await query.answer()
 
     if query.data == 'submit_content':
@@ -131,10 +145,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # await query.message.edit_text(text=query.message.text)
 
     elif query.data in ['admin_approve', 'admin_reject']:
-        if query.from_user.id != TELEGRAM_USER_ID:
-            await query.answer("仅管理员可操作", show_alert=True)
-            return
-
         vote_handler = VoteHandler(handler)
         try:
             # 设置投票消息ID

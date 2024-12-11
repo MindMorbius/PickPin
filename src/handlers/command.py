@@ -12,11 +12,17 @@ from prompts.prompts import TECH_PROMPT, NEWS_PROMPT, CULTURE_PROMPT, KNOWLEDGE_
 from utils.telegram_handler import TelegramMessageHandler
 import re
 import asyncio
+from utils.response_controller import ResponseController
 
 logger = logging.getLogger(__name__)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
+    response_controller = ResponseController()
+    
+    if not response_controller.is_user_allowed(update.effective_user.id, 'allowed_commands'):
+        return
+        
     chat = update.effective_chat
     user_id = update.effective_user.id
     
@@ -55,6 +61,11 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
+    response_controller = ResponseController()
+    
+    if not response_controller.is_user_allowed(update.effective_user.id, 'allowed_commands'):
+        return
+        
     chat = update.effective_chat
     message = update.message
     user = update.effective_user
@@ -170,6 +181,11 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
+    response_controller = ResponseController()
+
+    if not response_controller.is_user_allowed(update.effective_user.id, 'allowed_commands'):
+        return
+        
     chat = update.effective_chat
     message = update.message
     

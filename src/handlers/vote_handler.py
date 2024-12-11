@@ -5,6 +5,7 @@ import logging
 from utils.telegram_handler import TelegramMessageHandler
 from config.settings import CHANNEL_ID, GROUP_ID
 from utils.buttons import get_vote_buttons
+from utils.response_controller import ResponseController
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,13 @@ class VoteHandler:
         classification_result: str
     ) -> Optional[Message]:
         """发起投票"""
+        response_controller = ResponseController()
+        
+        # 检查发起投票的用户权限
+        if response_controller.is_user_blacklisted(self.handler.user_id):
+            await self.handler.send_notification("你已被禁止发起投票", auto_delete=True)
+            return None
+        
         try:
             vote_text = (
                 f"{classification_result}\n\n"
@@ -95,6 +103,11 @@ class VoteHandler:
     # 保留管理员手动操作的方法
     async def admin_approve(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         """管理员强制通过"""
+        response_controller = ResponseController()
+        
+        if not response_controller.is_user_admin(self.handler.user_id):
+            return
+        
         try:
             vote_message_id = context.chat_data.get('vote_message_id')
             # 从数据库获取投票信息
