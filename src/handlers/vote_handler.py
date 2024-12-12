@@ -6,6 +6,7 @@ from utils.telegram_handler import TelegramMessageHandler
 from config.settings import CHANNEL_ID, GROUP_ID
 from utils.buttons import get_vote_buttons
 from utils.response_controller import ResponseController
+from database.models import Message
 
 logger = logging.getLogger(__name__)
 
@@ -74,21 +75,21 @@ class VoteHandler:
             self.handler.log_handler.log_vote(vote_log_data)
 
             # 保存投票消息到数据库
-            vote_data = {
-                'message_id': vote_message.message_id,
-                'chat_id': GROUP_ID,
-                'user_id': self.handler.user_id,
-                'text': vote_text,
-                'type': 'vote',
-                'reply_to_message_id': original_message.message_id,
-                'metadata': {
+            vote_message = Message(
+                message_id=vote_message.message_id,
+                chat_id=GROUP_ID,
+                user_id=self.handler.user_id,
+                text=vote_text,
+                type='vote',
+                reply_to_message_id=original_message.message_id,
+                metadata={
                     'content': generated_content,
                     'classification': classification_result,
                     'status': 'started',
                     'initiator_id': self.handler.user_id
                 }
-            }
-            await context.bot_data['message_db'].save_message(vote_data)
+            )
+            await context.bot_data['db'].save_message(vote_message)
 
             return vote_message
 
@@ -110,16 +111,11 @@ class VoteHandler:
         
         try:
             vote_message_id = context.chat_data.get('vote_message_id')
-            # 从数据库获取投票信息
-            vote_data = await context.bot_data['message_db'].get_message(vote_message_id, GROUP_ID)
-            if not vote_data:
-                logger.error("Vote data not found in database")
-                return
-
-            # 更新投票状态
-            vote_data['metadata']['status'] = 'approved'
-            vote_data['metadata']['admin_id'] = self.handler.user_id
-            await context.bot_data['message_db'].save_message(vote_data)
+            vote_message = await context.bot_data['db'].get_message(vote_message_id, GROUP_ID)
+            if vote_message:
+                vote_message.metadata['status'] = 'approved'
+                vote_message.metadata['admin_id'] = self.handler.user_id
+                await context.bot_data['db'].save_message(vote_message)
             
             await self._publish_content(context)
         except Exception as e:
@@ -150,7 +146,7 @@ class VoteHandler:
                 return
 
             # 从数据库获取投票信息
-            vote_data = await context.bot_data['message_db'].get_message(vote_message_id, GROUP_ID)
+            vote_data = await context.bot_data['db'].get_message(vote_message_id, GROUP_ID)
             if not vote_data:
                 logger.error("Vote data not found in database")
                 return

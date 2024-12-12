@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Optional, Tuple, AsyncGenerator, Any
 from handlers.log_handler import LogHandler
+from database.models import Message
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +51,21 @@ class TelegramMessageHandler:
                     parse_mode=parse_mode
                 )
                 
-                # 保存到数据库
-                message_data = {
-                    'message_id': sent_message.message_id,
-                    'chat_id': sent_message.chat_id,
-                    'user_id': self.bot.id,
-                    'text': text,
-                    'type': 'bot_message',
-                    'reply_to_message_id': reply_to_message_id,
-                    'metadata': {
-                        'parse_mode': parse_mode,
-                        'has_markup': bool(reply_markup)
-                    }
-                }
-                await self.context.bot_data['message_db'].save_message(message_data)
-                
                 if sent_message and log_action:
                     self.log_handler.log_bot_action("send", sent_message, self.update)
+                    # 保存到数据库
+                    message_obj = Message(
+                        message_id=sent_message.message_id,
+                        chat_id=sent_message.chat_id,
+                        user_id=self.bot.id,
+                        text=text,
+                        type='bot_message',
+                        reply_to_message_id=reply_to_message_id,
+                        metadata={
+                            'update': self.update.to_dict()
+                        }
+                    )
+                    await self.context.bot_data['db'].save_message(message_obj)
                 return sent_message
             except (NetworkError, TimedOut) as e:
                 retry_count += 1
@@ -103,20 +102,17 @@ class TelegramMessageHandler:
                 )
                 
                 # 更新数据库
-                message_data = {
-                    'message_id': message.message_id,
-                    'chat_id': message.chat_id,
-                    'user_id': self.bot.id,
-                    'text': text,
-                    'type': 'bot_message',
-                    'metadata': {
-                        'parse_mode': parse_mode,
-                        'has_markup': bool(reply_markup),
-                        'is_edited': True,
-                        'edit_time': edited_message.edit_date.isoformat() if edited_message.edit_date else None
+                message_obj = Message(
+                    message_id=message.message_id,
+                    chat_id=message.chat_id,
+                    user_id=self.bot.id,
+                    text=text,
+                    type='bot_message',
+                    metadata={
+                        'update': self.update.to_dict()
                     }
-                }
-                await self.context.bot_data['message_db'].save_message(message_data)
+                )
+                await self.context.bot_data['db'].update_message(message_obj)
                 
                 if edited_message:
                     self.log_handler.log_bot_action("edit", edited_message, self.update)

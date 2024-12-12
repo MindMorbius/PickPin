@@ -11,34 +11,48 @@ import re
 from telegram.error import NetworkError, TimedOut
 from utils.telegram_handler import TelegramMessageHandler
 from utils.response_controller import ResponseController
+from database.models import Message
 
 
 logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
+    logger.info(f"类型：{update.message.chat.type}")
 
-    # 保存或更新用户消息
-    message = update.effective_message
-    message_data = {
-        'message_id': message.message_id,
-        'chat_id': message.chat.id,
-        'user_id': message.from_user.id if message.from_user else None,
-        'text': message.text or message.caption,
-        'type': 'user_message',
-        'reply_to_message_id': message.reply_to_message.message_id if message.reply_to_message else None,
-        'metadata': update.to_dict()
-    }
-    
-    await context.bot_data['message_db'].save_message(message_data)
+    try:
+        # 保存或更新用户消息
+        message = update.effective_message
+        message_obj = Message(
+            message_id=message.message_id,
+            chat_id=message.chat.id,
+            user_id=message.from_user.id if message.from_user else None,
+            text=message.text or message.caption,
+            type='user_message',
+            chat_type=message.chat.type,
+            reply_to_message_id=message.reply_to_message.message_id if message.reply_to_message else None,
+            metadata=update.to_dict()
+        )
+        await context.bot_data['db'].save_message(message_obj)
+    except Exception as e:
+        logger.error(f"Error saving message: {e}")  
 
     response_controller = ResponseController()
     
     # 分析消息并获取响应状态
-    should_respond, chat_type, is_update = response_controller.analyze_update(update, context)
+    should_respond, chat_type, is_update, submit_status = await response_controller.analyze_update(update, context)
     logger.info(f"should_respond: {should_respond}, chat_type: {chat_type}, is_update: {is_update}")
     
     if not should_respond:
+        return
+    
+    if submit_status:
+        await handler.send_notification(
+            "请使用 /submit 命令查看投稿流程，根据提示完成投稿。\n"
+            "如果需要帮助，请在群组：@rk_pin_bus 中联系管理员。",
+            reply_to_message_id=message.message_id,
+            auto_delete=False
+        )
         return
         
     message_text = get_message_text(message)

@@ -28,7 +28,7 @@ DEFAULT_MODE = "classify"  # 可选值: "classify" 或 "chat"
 
 # 在现有配置后添加
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-exp-1206")
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp") # gemini-2.0-flash-exp  gemini-exp-1206
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # 可选值: openai, gemini
 

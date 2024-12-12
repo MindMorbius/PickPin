@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, BotCommand, BotCommandScope, BotCommandScopeAllPrivateChats, BotCommandScopeChat
+from telegram import Update, BotCommand, BotCommandScope, BotCommandScopeAllPrivateChats, BotCommandScopeChat, BotCommandScopeDefault
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, JobQueue, PollHandler
 from telegram.error import NetworkError, TimedOut
 import asyncio
@@ -8,13 +8,119 @@ from handlers.command import start_command, get_id_command, analyze_command, sum
 from handlers.conversation import handle_message
 from handlers.callback import handle_callback
 from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL, CHANNEL_ID, GROUP_ID
-from database.message_db import MessageDB
+from database.db_controller import DBController
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+async def register_commands(app: Application) -> None:
+    # 先清除所有已有命令
+    await app.bot.delete_my_commands()
+    
+    # 定义命令
+    base_commands = [
+        BotCommand("start", "启动机器人"),
+        BotCommand("getid", "获取用户和群组ID"),
+    ]
+
+    private_commands = base_commands + [
+        BotCommand("submit", "开始投稿"),
+    ]
+
+    public_commands = base_commands + [
+        BotCommand("analyze", "分析引用的消息"),
+        BotCommand("summarize", "总结引用的消息"),
+    ]
+    
+    admin_commands = base_commands + private_commands + public_commands + [
+        BotCommand("user", "查看用户信息"),
+        BotCommand("blacklist", "拉黑用户"),
+        BotCommand("unblacklist", "解除拉黑"),
+        BotCommand("admin", "查看管理员信息"),
+        BotCommand("addadmin", "添加管理员"),
+        BotCommand("removeadmin", "移除管理员"),
+    ]
+
+    # 注册管理员私聊命令
+    await app.bot.set_my_commands(
+        admin_commands,
+        scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID)
+    )
+
+    # 注册群组命令
+    await app.bot.set_my_commands(
+        public_commands,
+        scope=BotCommandScopeChat(chat_id=GROUP_ID)
+    )
+
+    # 注册默认命令（可选）
+    await app.bot.set_my_commands(
+        private_commands,
+        scope=BotCommandScopeDefault()
+    )
+
+async def post_init(app: Application) -> None:
+    logger.info("Bot is starting up...")
+    
+    # 初始化数据库控制器
+    db_controller = DBController("data/app.db")
+    await db_controller.init()
+    app.bot_data['db'] = db_controller
+    
+
+    # 清除所有命令
+    await app.bot.delete_my_commands()
+    
+    # 注册命令
+    await register_commands(app)
+    
+    # 发送启动通知
+    await app.bot.send_message(
+        chat_id=TELEGRAM_USER_ID,
+        text="🤖 Bot 已启动"
+    )
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    error = context.error
+    logger.error(f"Error type: {type(error)}")
+    
+    if isinstance(error, NetworkError):
+        logger.error(f"Network error occurred: {error}")
+        # 网络错误，等待后重试
+        await asyncio.sleep(1)
+    elif isinstance(error, TimedOut):
+        logger.error(f"Request timed out: {error}")
+        # 超时错误，等待后重试
+        await asyncio.sleep(0.5)
+    else:
+        logger.error(f"Update {update} caused error {error}")
+        # 其他错误
+        if update and update.effective_message:
+            await update.effective_message.reply_text(
+                "抱歉，处理消息时出现错误，请稍后重试。"
+            )
+
+def setup_handlers(app: Application) -> None:
+    # 命令处理器
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("getid", get_id_command))
+    app.add_handler(CommandHandler("analyze", analyze_command))
+    app.add_handler(CommandHandler("summarize", summarize_command))
+    
+    # 回调处理器
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    
+    # 消息处理器 (放最后)
+    app.add_handler(MessageHandler(
+        filters.ALL,
+        handle_message
+    ))
+
+    app.add_error_handler(error_handler)
+
 
 def main() -> None:
     # 创建 JobQueue 实例
@@ -31,76 +137,10 @@ def main() -> None:
         .job_queue(job_queue)\
         .build()
 
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("getid", get_id_command))
-    application.add_handler(CommandHandler("analyze", analyze_command))
-    application.add_handler(CommandHandler("summarize", summarize_command))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(
-        (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.CAPTION) & ~filters.COMMAND, 
-        handle_message
-    ))
-
-    async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        error = context.error
-        logger.error(f"Error type: {type(error)}")
-        
-        if isinstance(error, NetworkError):
-            logger.error(f"Network error occurred: {error}")
-            # 网络错误，等待后重试
-            await asyncio.sleep(1)
-        elif isinstance(error, TimedOut):
-            logger.error(f"Request timed out: {error}")
-            # 超时错误，等待后重试
-            await asyncio.sleep(0.5)
-        else:
-            logger.error(f"Update {update} caused error {error}")
-            # 其他错误
-            if update and update.effective_message:
-                await update.effective_message.reply_text(
-                    "抱歉，处理消息时出现错误，请稍后重试。"
-                )
+    # 设置处理器
+    setup_handlers(application)
     
-    application.add_error_handler(error_handler)
-
-    async def post_init(app: Application) -> None:
-        logger.info("Bot is starting up...")
-        
-        # 初始化消息数据库
-        message_db = MessageDB()
-        await message_db.init()
-        app.bot_data['message_db'] = message_db
-        
-        # 先删除所有命令
-        await app.bot.delete_my_commands()
-        
-        # 更新命令列表
-        commands = [
-            BotCommand("start", "启动机器人"),
-            BotCommand("getid", "获取用户和群组ID"),
-            BotCommand("analyze", "分析引用的消息"),
-            BotCommand("summarize", "总结引用的消息")
-        ]
-        
-        # 设置管理员私聊命令
-        await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=TELEGRAM_USER_ID))
-        # 设置群组命令
-        await app.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=GROUP_ID))
-        
-        await app.bot.send_message(
-            chat_id=TELEGRAM_USER_ID,
-            parse_mode='Markdown',
-            text="🤖 PickPin - 为RKPin频道提供信息处理和投稿服务\n\n"
-                 "✅ 机器人已启动完成\n"
-                 "🔑 可用命令:\n"
-                 "- /start - 启动机器人\n"
-                 "- /getid - 获取用户和群组ID\n"
-                 "- /analyze - 分析引用的消息\n"
-                 "- /summarize - 总结引用的消息\n\n"
-                 f"🔌 AI提供商: {AI_PROVIDER}\n"
-                 f"🤖 AI模型: {OPENAI_MODEL if AI_PROVIDER == 'openai' else GOOGLE_MODEL}"
-        )
-    
+    # 设置启动回调
     application.post_init = post_init
     
     # 添加重试逻辑

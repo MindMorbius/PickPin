@@ -18,26 +18,13 @@ logger = logging.getLogger(__name__)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
-    response_controller = ResponseController()
-    
-    if not response_controller.is_user_allowed(update.effective_user.id, 'allowed_commands'):
-        return
-        
     chat = update.effective_chat
     user_id = update.effective_user.id
-    
-    if chat.type == 'private':
-        if user_id == TELEGRAM_USER_ID:
-            await handler.reply_to_command(
-                "👋 管理员你好！我是 PickPin 机器人\n\n"
-                "我可以帮助你处理和投稿信息到 RKPin 频道\n\n",
-                auto_delete=False
-            )
-    elif chat.id == GROUP_ID:
-        await handler.reply_to_command(
-            "👋 你好！我是 PickPin 机器人\n\n",
-            auto_delete=False
-        )
+    await handler.reply_to_command(
+        "👋 你好！我是 PickPin 机器人\n\n"
+        "我可以帮助你处理和投稿信息到 RKPin 频道\n\n",
+        auto_delete=False
+    )
 
 async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
@@ -45,11 +32,10 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user = update.effective_user
     
     if chat.type == 'private':
-        if user.id == TELEGRAM_USER_ID:
-            await handler.reply_to_command(
-                f"你的用户 ID 是: {user.id}",
-                auto_delete=False
-            )
+        await handler.reply_to_command(
+            f"你的用户 ID 是: {user.id}",
+            auto_delete=False
+        )
     elif chat.id == GROUP_ID:
         await handler.reply_to_command(
             f"群组 ID: {chat.id}\n"
@@ -63,7 +49,7 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     handler = TelegramMessageHandler(update, context)
     response_controller = ResponseController()
     
-    if not response_controller.is_user_allowed(update.effective_user.id, 'allowed_commands'):
+    if not await response_controller.is_user_allowed(update, False, context):
         return
         
     chat = update.effective_chat
@@ -76,12 +62,6 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_to_message_id=message.message_id,
             auto_delete=True
         )
-        return
-        
-    if chat.type == 'private':
-        if user.id != TELEGRAM_USER_ID:
-            return
-    elif chat.id != GROUP_ID:
         return
         
     reply_text = message.reply_to_message.text or message.reply_to_message.caption
@@ -183,7 +163,7 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     handler = TelegramMessageHandler(update, context)
     response_controller = ResponseController()
 
-    if not response_controller.is_user_allowed(update.effective_user.id, 'allowed_commands'):
+    if not await response_controller.is_user_allowed(update, False, context):
         return
         
     chat = update.effective_chat
@@ -195,12 +175,6 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             reply_to_message_id=message.message_id,
             auto_delete=True
         )
-        return
-        
-    if chat.type == 'private':
-        if update.effective_user.id != TELEGRAM_USER_ID:
-            return
-    elif chat.id != GROUP_ID:
         return
         
     reply_text = message.reply_to_message.text or message.reply_to_message.caption

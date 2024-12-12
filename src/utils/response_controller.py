@@ -3,7 +3,7 @@ from telegram import Update, Message
 from telegram.ext import ContextTypes
 import time
 from config.settings import TELEGRAM_USER_ID, GROUP_ID
-from config.response_settings import RESPONSE_SETTINGS, RESPONSE_PRIORITY, USER_LISTS
+from config.response_settings import RESPONSE_SETTINGS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,30 +12,56 @@ class ResponseController:
     def __init__(self):
         self._last_response_time = {}  # 记录最后响应时间
 
-    def is_user_allowed(self, user_id: int, list_name: str) -> bool:
-        """检查用户是否在指定名单中"""
-        user_list = USER_LISTS.get(list_name, [])
-        return user_list == 'all' or str(user_id) in user_list
 
-    def is_user_admin(self, user_id: int) -> bool:
+    async def is_user_allowed(self, update: Update, is_admin: bool, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        """检查用户是否有权限
+        
+        Args:
+            update: 更新
+            is_admin: 是否需要管理员权限
+            context: 上下文，用于访问数据库
+    
+        Returns:
+            bool: 是否允许访问
+        """
+        # 确保用户存在
+        user = update.effective_user
+        await context.bot_data['db'].ensure_user_exists(
+            user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        )
+
+        # 如果需要管理员权限，检查用户是否为管理员
+        if is_admin:
+            return await self.is_user_admin(user.id, context)
+    
+        # 检查用户是否被拉黑
+        if await self.is_user_blacklisted(user.id, context):
+            return False
+            
+        return True
+
+
+    async def is_user_admin(self, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """检查用户是否为管理员"""
-        return self.is_user_allowed(user_id, 'admin_list')
+        user = await context.bot_data['db'].get_user(user_id)
+        return user and user.is_admin  # 使用属性访问方式
 
-    def is_user_blacklisted(self, user_id: int) -> bool:
+    async def is_user_blacklisted(self, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """检查用户是否在黑名单中"""
-        return self.is_user_allowed(user_id, 'blacklist')
+        user = await context.bot_data['db'].get_user(user_id)
+        return user and user.is_blocked  # 使用属性访问方式
 
-    def is_user_whitelisted(self, user_id: int) -> bool:
-        """检查用户是否在白名单中"""
-        return self.is_user_allowed(user_id, 'whitelist')
-
-    def analyze_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, str, bool]:
-        """分析更新，返回是否响应、消息来源、是否为更新"""
+    async def analyze_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, str, bool, bool]:
+        """分析更新，返回是否响应、消息来源、是否为更新、消息类型"""
         message = update.effective_message
         chat = update.effective_chat
         user = update.effective_user
+        submit_status = False
 
-        logger.info(f"message: {message}, chat: {chat}, user: {user}")
+        logger.info(f"类型：{chat.type}, 用户：{user}")
         
         if not message or not chat:
             return False, "unknown", False
@@ -45,44 +71,39 @@ class ResponseController:
     
         # 使用 chat.type 来区分消息来源
         if chat.type == 'channel':
-            should_respond = self._check_channel_chat(message)
+            should_respond = await self._check_channel_chat(message)
         elif chat.type == 'private':
-            should_respond = self._check_private_chat(message, user)
+            should_respond, submit_status = await self._check_private_chat(message, user, context)
         elif chat.type in ['group', 'supergroup']:
-            should_respond = self._check_group_chat(message, user)
+            should_respond = await self._check_group_chat(message, user, context)
         else:
             should_respond = False
     
-        return should_respond, chat.type, is_update
+        return should_respond, chat.type, is_update, submit_status
         
-    def _check_private_chat(self, message: Message, user) -> bool:
+    async def _check_private_chat(self, message: Message, user, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, bool]:
         settings = RESPONSE_SETTINGS['private_chat']
 
         logger.info(f"用户ID: {user.id}, 用户名: {user.username}, 用户名: {user.first_name}")
 
         # 管理员正常响应
-        if self.is_user_admin(user.id):
-            return True
+        if await self.is_user_admin(user.id, context):
+            return True, False
         
-        if not settings['enabled']:
-            return False
+        # if not settings['enabled']:
+        #     return False
         
         # 检查黑名单
-        if self.is_user_blacklisted(user.id):
-            return False
-        
-        # 检查白名单
-        if not self.is_user_whitelisted(user.id):
-            return False
-        
+        if await self.is_user_blacklisted(user.id, context):
+            return False, False
+
         # 检查命令权限
         if message.text and message.text.startswith('/'):
             command = message.text.split()[0][1:]
             return command in settings['allowed_commands']
-        
-        return True
-        
-    def _check_group_chat(self, message: Message, user) -> bool:
+        return True, True
+   
+    async def _check_group_chat(self, message: Message, user, context: ContextTypes.DEFAULT_TYPE) -> bool:
         settings = RESPONSE_SETTINGS['group_chat']
         
         if not settings['enabled']:
@@ -93,7 +114,7 @@ class ResponseController:
             return False
         
         # 检查用户黑名单
-        if self.is_user_blacklisted(user.id):
+        if await self.is_user_blacklisted(user.id, context):
             return False
         
         # 检查自动转发
@@ -113,8 +134,7 @@ class ResponseController:
             return False
         
         return True
-        
-    
+
     def _check_mention(self, message: Message) -> bool:
         """检查是否@机器人"""
         if not message.entities:
@@ -133,7 +153,7 @@ class ResponseController:
             return False
         return message.reply_to_message.from_user.username == 'rk_pin_bot'  # 替换为你的机器人用户名
 
-    def _check_channel_chat(self, message: Message) -> bool:
+    async def _check_channel_chat(self, message: Message) -> bool:
         settings = RESPONSE_SETTINGS['channel_chat']
         
         if not settings['enabled']:
@@ -144,4 +164,3 @@ class ResponseController:
             return False
         
         return True
- 
