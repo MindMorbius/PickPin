@@ -2,7 +2,7 @@ import logging
 from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config.settings import TELEGRAM_USER_ID, DEFAULT_MODE, CHANNEL_ID, GROUP_ID
-from services.ai_service import get_ai_response
+from services.ai_service import get_ai_response, get_vision_response
 from prompts.prompts import (
     CLASSIFY_PROMPT, CHAT_PROMPT, TECH_PROMPT, NEWS_PROMPT, CULTURE_PROMPT, KNOWLEDGE_PROMPT, NORMAL_PROMPT
 )
@@ -40,24 +40,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     response_controller = ResponseController()
     
     # 分析消息并获取响应状态
-    should_respond, chat_type, is_update, submit_status = await response_controller.analyze_update(update, context)
+    should_respond, chat_type, is_update = await response_controller.analyze_update(update, context)
     logger.info(f"should_respond: {should_respond}, chat_type: {chat_type}, is_update: {is_update}")
     
     if not should_respond:
         return
-    
-    if submit_status:
-        await handler.send_notification(
-            "请使用 /submit 命令查看投稿流程，根据提示完成投稿。\n"
-            "如果需要帮助，请在群组：@rk_pin_bus 中联系管理员。",
-            reply_to_message_id=message.message_id,
-            auto_delete=False
-        )
-        return
         
     message_text = get_message_text(message)
     
-    if not message_text:
+    # 检查原始消息和引用消息中的媒体文件
+    has_media_result = has_media(message)
+    reply_has_media = message.reply_to_message and has_media(message.reply_to_message)[0]
+    
+    if not message_text and not has_media_result[0] and not reply_has_media:
         await handler.send_notification(
             "无法处理此类型的消息",
             reply_to_message_id=message.message_id,
@@ -71,11 +66,68 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
     if not status_msg:
         return
+
+    # 如果引用消息包含媒体，优先处理引用消息的媒体
+    if reply_has_media:
+        await process_message_with_ai(message.reply_to_message, message_text, chat_type, handler, status_msg)
+    else:
+        await process_message_with_ai(message, message_text, chat_type, handler, status_msg)
+
+def has_media(message) -> tuple[bool, str]:
+    """
+    检查消息是否包含媒体文件
+    返回: (是否包含媒体, 媒体类型)
+    """
+    if message.photo:
+        return True, "photo"
+    elif message.document and message.document.mime_type and message.document.mime_type.startswith('image/'):
+        return True, "photo"
+    elif message.video:
+        return True, "video"
+    elif message.document and message.document.mime_type and message.document.mime_type.startswith('video/'):
+        return True, "video"
+    return False, ""
+
+async def process_message_with_ai(message, message_text: str, chat_type: str, handler, status_msg) -> None:
+    """处理消息并调用相应的AI服务"""
+    has_media_file, media_type = has_media(message)
     
-    await handler.stream_process_message(
-        get_ai_response(message_text, NORMAL_PROMPT),
-        status_msg,
-    )
+    if has_media_file:
+        if media_type == "photo":
+            # 获取图片文件
+            if message.photo:
+                file_id = message.photo[0].file_id  # 使用最小的图片
+            else:
+                file_id = message.document.file_id
+                
+            file = await handler.context.bot.get_file(file_id)
+            file_url = file.file_path
+
+            logger.info(f"图片地址 file_url: {file_url}")
+            
+            # 使用 vision response 处理
+            prompt = CHAT_PROMPT if chat_type == 'private' else NORMAL_PROMPT
+            await handler.stream_process_message(
+                get_vision_response(message_text or "请分析这张图片", prompt, file_url),
+                status_msg,
+                parse_mode='HTML'
+            )
+        else:
+            # 暂不支持的媒体类型
+            await handler.send_notification(
+                f"暂不支持处理{media_type}类型的文件",
+                reply_to_message_id=message.message_id,
+                auto_delete=True
+            )
+            return
+    else:
+        # 文本处理
+        prompt = CHAT_PROMPT if chat_type == 'private' else NORMAL_PROMPT
+        await handler.stream_process_message(
+            get_ai_response(message_text, prompt),
+            status_msg,
+            parse_mode='HTML'
+        )
 
 def get_message_text(message) -> str:
     """

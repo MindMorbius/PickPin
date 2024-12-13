@@ -11,7 +11,7 @@ client = OpenAI(
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
-async def get_gemini_response(message: str, system_prompt: str):
+async def get_google_response(message: str, system_prompt: str):
     max_retries = 3
     base_delay = 1
     current_model = GOOGLE_MODEL
@@ -27,8 +27,8 @@ async def get_gemini_response(message: str, system_prompt: str):
                 stream=True
             )
             
-            async for text, update in stream_response(response):
-                yield text, update
+            async for text, update, footer in stream_response(response):
+                yield text, update, footer
             return
             
         except Exception as e:
@@ -45,5 +45,5 @@ async def get_gemini_response(message: str, system_prompt: str):
                 continue
             else:
                 logger.error(f"Failed after {max_retries} attempts: {str(e)}")
-                yield f"抱歉，服务暂时不可用，请稍后重试。错误: {str(e)}", True
+                yield f"抱歉，服务暂时不可用，请稍后重试。错误: {str(e)}", True, ""
                 return

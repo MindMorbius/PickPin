@@ -4,11 +4,12 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from telegram.error import NetworkError, TimedOut
 import asyncio
 from config.settings import TELEGRAM_BOT_TOKEN, HTTP_PROXY, TELEGRAM_USER_ID
-from handlers.command import start_command, get_id_command, analyze_command, summarize_command
+from handlers.command import start_command, get_id_command, analyze_command, summarize_command, submit_command, help_command
 from handlers.conversation import handle_message
 from handlers.callback import handle_callback
 from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL, CHANNEL_ID, GROUP_ID
 from database.db_controller import DBController
+from datetime import datetime
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
@@ -17,13 +18,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def register_commands(app: Application) -> None:
-    # 先清除所有已有命令
-    await app.bot.delete_my_commands()
+    # 清除所有作用域的命令
+    for scope in [
+        BotCommandScopeDefault(),
+        BotCommandScopeAllPrivateChats(),
+        BotCommandScopeChat(chat_id=TELEGRAM_USER_ID),
+        BotCommandScopeChat(chat_id=GROUP_ID)
+    ]:
+        try:
+            await app.bot.delete_my_commands(scope=scope)
+        except Exception as e:
+            logger.error(f"Error clearing commands for scope {scope}: {e}")
     
     # 定义命令
     base_commands = [
         BotCommand("start", "启动机器人"),
         BotCommand("getid", "获取用户和群组ID"),
+        BotCommand("help", "查看帮助"),
     ]
 
     private_commands = base_commands + [
@@ -55,11 +66,16 @@ async def register_commands(app: Application) -> None:
         public_commands,
         scope=BotCommandScopeChat(chat_id=GROUP_ID)
     )
-
-    # 注册默认命令（可选）
+    # 注册默认命令
     await app.bot.set_my_commands(
         private_commands,
         scope=BotCommandScopeDefault()
+    )
+    
+    # 同时也注册到所有私聊作用域
+    await app.bot.set_my_commands(
+        private_commands,
+        scope=BotCommandScopeAllPrivateChats()
     )
 
 async def post_init(app: Application) -> None:
@@ -71,16 +87,13 @@ async def post_init(app: Application) -> None:
     app.bot_data['db'] = db_controller
     
 
-    # 清除所有命令
-    await app.bot.delete_my_commands()
-    
     # 注册命令
     await register_commands(app)
     
     # 发送启动通知
     await app.bot.send_message(
         chat_id=TELEGRAM_USER_ID,
-        text="🤖 Bot 已启动"
+        text="🤖 PickPin 已启动，现在时间：" + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -109,6 +122,8 @@ def setup_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("getid", get_id_command))
     app.add_handler(CommandHandler("analyze", analyze_command))
     app.add_handler(CommandHandler("summarize", summarize_command))
+    app.add_handler(CommandHandler("submit", submit_command))
+    app.add_handler(CommandHandler("help", help_command))
     
     # 回调处理器
     app.add_handler(CallbackQueryHandler(handle_callback))

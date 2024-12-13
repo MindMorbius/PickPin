@@ -1,6 +1,8 @@
 from config.settings import AI_PROVIDER
-from .openai_service import get_openai_response
-from .gemini_service import get_gemini_response
+# from .openai_service import get_openai_response
+from .google_service import get_google_response
+from .siliconflow_service import get_siliconflow_response
+from .zhipu_service import get_zhipu_response, get_zhipu_vision_response, get_zhipu_vision_response_base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,23 +15,38 @@ def escape_markdown(text: str) -> str:
     return text
 
 async def get_ai_response(message: str, system_prompt: str):
-    # 添加 Markdown V2 格式要求
-    system_prompt = system_prompt
     accumulated_text = ""
     
-    if AI_PROVIDER == "gemini":
-        async for text, update in get_gemini_response(message, system_prompt):
+    if AI_PROVIDER == "google":
+        async for text, update, footer in get_google_response(message, system_prompt):
             accumulated_text = text
-            # 流式更新时用代码块包裹
-            yield f"```\n\n{text}\n\n```", update
-    else:
-        async for text, update in get_openai_response(message, system_prompt):
+            if update:  # 最终更新
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
+            else:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update
+                
+    elif AI_PROVIDER == "siliconflow":
+        async for text, update, footer in get_siliconflow_response(message, system_prompt):
             accumulated_text = text
-            yield f"```\n\n{text}\n\n```", update
-            
-    # 最后一次更新发送完整格式化内容
-    if accumulated_text:
-        logger.info(f"Final AI response: {accumulated_text}")
-        # 转义特殊字符
-        formatted_text = accumulated_text
-        yield formatted_text, True
+            if update:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
+            else:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update
+                
+    elif AI_PROVIDER == "zhipu":
+        async for text, update, footer in get_zhipu_response(message, system_prompt):
+            accumulated_text = text
+            if update:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
+            else:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update
+
+async def get_vision_response(message: str, system_prompt: str, image_url: str):
+    accumulated_text = ""
+    
+    async for text, update, footer in get_zhipu_vision_response_base64(message, system_prompt, image_url):
+        accumulated_text = text
+        if update:
+            yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
+        else:
+            yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update

@@ -17,5 +17,5 @@ async def get_openai_response(message: str, system_prompt: str):
         stream=True
     )
     
-    async for text, update in stream_response(stream):
-        yield text, update
+    async for text, update, footer in stream_response(stream):
+        yield text, update, footer

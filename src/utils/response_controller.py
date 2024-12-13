@@ -54,14 +54,22 @@ class ResponseController:
         user = await context.bot_data['db'].get_user(user_id)
         return user and user.is_blocked  # 使用属性访问方式
 
-    async def analyze_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, str, bool, bool]:
+    async def analyze_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, str, bool]:
+        # 确保用户存在
+        user = update.effective_user
+        await context.bot_data['db'].ensure_user_exists(
+            user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        )
+
         """分析更新，返回是否响应、消息来源、是否为更新、消息类型"""
         message = update.effective_message
         chat = update.effective_chat
         user = update.effective_user
-        submit_status = False
 
-        logger.info(f"类型：{chat.type}, 用户：{user}")
+        # logger.info(f"类型：{chat.type}, 用户：{user}")
         
         if not message or not chat:
             return False, "unknown", False
@@ -73,35 +81,35 @@ class ResponseController:
         if chat.type == 'channel':
             should_respond = await self._check_channel_chat(message)
         elif chat.type == 'private':
-            should_respond, submit_status = await self._check_private_chat(message, user, context)
+            should_respond= await self._check_private_chat(message, user, context)
         elif chat.type in ['group', 'supergroup']:
             should_respond = await self._check_group_chat(message, user, context)
         else:
             should_respond = False
     
-        return should_respond, chat.type, is_update, submit_status
+        return should_respond, chat.type, is_update
         
-    async def _check_private_chat(self, message: Message, user, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, bool]:
+    async def _check_private_chat(self, message: Message, user, context: ContextTypes.DEFAULT_TYPE) -> bool:
         settings = RESPONSE_SETTINGS['private_chat']
 
-        logger.info(f"用户ID: {user.id}, 用户名: {user.username}, 用户名: {user.first_name}")
+        # logger.info(f"用户ID: {user.id}, 用户名: {user.username}, 用户名: {user.first_name}")
 
         # 管理员正常响应
         if await self.is_user_admin(user.id, context):
-            return True, False
+            return True
         
         # if not settings['enabled']:
         #     return False
         
         # 检查黑名单
         if await self.is_user_blacklisted(user.id, context):
-            return False, False
+            return False
 
         # 检查命令权限
         if message.text and message.text.startswith('/'):
             command = message.text.split()[0][1:]
             return command in settings['allowed_commands']
-        return True, True
+        return False
    
     async def _check_group_chat(self, message: Message, user, context: ContextTypes.DEFAULT_TYPE) -> bool:
         settings = RESPONSE_SETTINGS['group_chat']

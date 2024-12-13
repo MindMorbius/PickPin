@@ -173,7 +173,8 @@ class TelegramMessageHandler:
         self,
         processor: AsyncGenerator[Tuple[str, bool], Any],
         status_message: Message,
-        final_markup: Optional[InlineKeyboardMarkup] = None
+        final_markup: Optional[InlineKeyboardMarkup] = None,
+        parse_mode: Optional[str] = None
     ) -> Optional[str]:
         """处理流式响应并更新消息，使用兜底策略"""
         last_text = ""
@@ -181,12 +182,12 @@ class TelegramMessageHandler:
             async for response_text, should_update in processor:
                 if should_update and response_text != last_text:
                     last_text = response_text
-                    success = await self.edit_message(status_message, response_text)
+                    success = await self.edit_message(status_message, response_text, parse_mode=parse_mode)
                     if not success:
                         return None
 
             if last_text and final_markup:
-                await self.edit_message(status_message, last_text, reply_markup=final_markup)
+                await self.edit_message(status_message, last_text, reply_markup=final_markup, parse_mode=parse_mode)
             return last_text
         except Exception as e:
             logger.error(f"Error in stream processing: {e}")

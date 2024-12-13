@@ -22,7 +22,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     await handler.reply_to_command(
         "👋 你好！我是 PickPin 机器人\n\n"
-        "我可以帮助你处理和投稿信息到 RKPin 频道\n\n",
+        "我可以帮助你处理和投稿信息到 RKPin 频道\n\n"
+        "🤖 PickPin 投稿指南\n\n"
+        "1. 先将投稿内容发送给机器人\n"
+        "2. 使用 /submit 命令 回复需要投稿的内容\n"
+        "3. 机器人会根据内容分析，并生成投稿内容\n"
+        "4. 如果觉得内容不错，点击“投个稿”按钮\n"
+        "5. 机器人会将投稿内容发送到群组 @rk_pin_bus 进行审核\n\n"
+        "⚠️ 注意事项:\n"
+        "- 内容需要符合 RKPin 频道的要求\n"
+        "- 禁止推广/黑产/刷屏/色情/NSFW\n"
+        "- 禁止黄赌毒/宗教/政治/键政\n",
         auto_delete=False
     )
 
@@ -44,6 +54,26 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"你的用户 ID: {user.id}",
             auto_delete=False
         )
+async def submit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    handler = TelegramMessageHandler(update, context)
+    await handler.reply_to_command(
+        "请发送要投稿的内容",
+        auto_delete=True
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    handler = TelegramMessageHandler(update, context)
+    await handler.reply_to_command(
+        "🤖 PickPin 投稿指南\n\n"
+        "1. 先将投稿内容发送给机器人\n"
+        "2. 使用 /submit 命令 回复需要投稿的内容\n"
+        "3. 机器人会根据内容分析，并生成投稿内容\n"
+        "4. 如果觉得内容不错，点击“投个稿”按钮\n"
+        "5. 机器人会将投稿内容发送到群组 @rk_pin_bus 进行审核\n\n"
+
+        "如果需要帮助，请在群组：@rk_pin_bus 中联系管理员。",
+        auto_delete=False
+    )
 
 async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
