@@ -180,7 +180,7 @@ class TelegramMessageHandler:
         last_text = ""
         try:
             async for response_text, should_update in processor:
-                if should_update and response_text != last_text:
+                if response_text != last_text:
                     last_text = response_text
                     success = await self.edit_message(status_message, response_text, parse_mode=parse_mode)
                     if not success:

@@ -1,6 +1,6 @@
 from config.settings import AI_PROVIDER
 # from .openai_service import get_openai_response
-from .google_service import get_google_response
+from .google_service import get_google_response, get_google_vision_response
 from .siliconflow_service import get_siliconflow_response
 from .zhipu_service import get_zhipu_response, get_zhipu_vision_response, get_zhipu_vision_response_base64
 import logging
@@ -43,10 +43,18 @@ async def get_ai_response(message: str, system_prompt: str):
 
 async def get_vision_response(message: str, system_prompt: str, image_url: str):
     accumulated_text = ""
-    
-    async for text, update, footer in get_zhipu_vision_response_base64(message, system_prompt, image_url):
-        accumulated_text = text
-        if update:
-            yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
-        else:
-            yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update
+
+    if AI_PROVIDER == "zhipu":
+        async for text, update, footer in get_zhipu_vision_response_base64(message, system_prompt, image_url):
+            accumulated_text = text
+            if update:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
+            else:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update
+    elif AI_PROVIDER == "google":
+        async for text, update, footer in get_google_vision_response(message, image_url, system_prompt):
+            accumulated_text = text
+            if update:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>{footer}", update
+            else:
+                yield f"<blockquote expandable>\n\n{text}\n\n</blockquote>", update

@@ -10,15 +10,22 @@
 - [x] 内容显示优化
 - [x] 增加图片处理
 
+
 - [ ] 优化数据库交互组件
 
 - [ ] 命令处理
 - [ ] 按钮处理
 
+- [ ] 总结聊天记录
+
+
+
 - [ ] 实现投稿流程：引导、投稿、审核、展示
 
+- [ ] 模型切换
 
 ## 后期计划
 - [ ] 支持 Kroki API 
+- [ ] OCR API：https://ai.google.dev/gemini-api/docs/openai?hl=zh-cn#ocr-api
 - [ ] 结构化输出：https://ai.google.dev/gemini-api/docs/openai?hl=zh-cn#structured-output
 - [ ] rkpin 处理信息 展示

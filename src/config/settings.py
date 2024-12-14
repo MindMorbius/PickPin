@@ -30,7 +30,7 @@ SILICONFLOW_MODEL = os.getenv("SILICONFLOW_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
 # Google Gemini 配置
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-exp") # gemini-2.0-flash-exp  gemini-exp-1206
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-exp-1206") # gemini-2.0-flash-exp  gemini-exp-1206
 
 # 智谱AI 配置
 ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY")

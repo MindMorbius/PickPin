@@ -96,7 +96,7 @@ async def process_message_with_ai(message, message_text: str, chat_type: str, ha
         if media_type == "photo":
             # 获取图片文件
             if message.photo:
-                file_id = message.photo[0].file_id  # 使用最小的图片
+                file_id = message.photo[-1].file_id  # 使用最大的图片
             else:
                 file_id = message.document.file_id
                 

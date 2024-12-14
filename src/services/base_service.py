@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 async def stream_response(stream, accumulated_text="") -> AsyncGenerator[Tuple[str, bool, str], None]:
     last_update_time = 0
     last_text = accumulated_text
-    UPDATE_INTERVAL = 1.5
+    UPDATE_INTERVAL = 1
     MIN_NEW_CHARS = 20
     start_time = time.time()
     
