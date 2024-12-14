@@ -108,7 +108,7 @@ async def process_message_with_ai(message, message_text: str, chat_type: str, ha
             # 使用 vision response 处理
             prompt = CHAT_PROMPT if chat_type == 'private' else NORMAL_PROMPT
             await handler.stream_process_message(
-                get_vision_response(message_text or "请分析这张图片", prompt, file_url),
+                get_vision_response(message_text or "分析图片并用中文回复", prompt, file_url),
                 status_msg,
                 parse_mode='HTML'
             )
@@ -117,7 +117,7 @@ async def process_message_with_ai(message, message_text: str, chat_type: str, ha
             await handler.send_notification(
                 f"暂不支持处理{media_type}类型的文件",
                 reply_to_message_id=message.message_id,
-                auto_delete=True
+                auto_delete=False
             )
             return
     else:

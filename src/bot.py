@@ -37,11 +37,11 @@ async def register_commands(app: Application) -> None:
         BotCommand("help", "查看帮助"),
     ]
 
-    private_commands = base_commands + [
+    private_commands = [
         BotCommand("submit", "开始投稿"),
     ]
 
-    public_commands = base_commands + [
+    public_commands = [
         BotCommand("analyze", "分析引用的消息"),
         BotCommand("summarize", "总结引用的消息"),
     ]
@@ -68,13 +68,13 @@ async def register_commands(app: Application) -> None:
     )
     # 注册默认命令
     await app.bot.set_my_commands(
-        private_commands,
+        private_commands + base_commands,
         scope=BotCommandScopeDefault()
     )
     
     # 同时也注册到所有私聊作用域
     await app.bot.set_my_commands(
-        private_commands,
+        private_commands + base_commands,
         scope=BotCommandScopeAllPrivateChats()
     )
 

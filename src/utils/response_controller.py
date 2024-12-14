@@ -86,6 +86,10 @@ class ResponseController:
             should_respond = await self._check_group_chat(message, user, context)
         else:
             should_respond = False
+
+        # 增加使用次数
+        if should_respond:
+            await context.bot_data['db'].increment_user_usage(user.id)
     
         return should_respond, chat.type, is_update
         
