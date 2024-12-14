@@ -55,42 +55,38 @@ class ResponseController:
         return user and user.is_blocked  # 使用属性访问方式
 
     async def analyze_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Tuple[bool, str, bool]:
-        # 确保用户存在
-        user = update.effective_user
-        await context.bot_data['db'].ensure_user_exists(
-            user.id,
-            username=user.username,
-            first_name=user.first_name,
-            last_name=user.last_name
-        )
-
-        """分析更新，返回是否响应、消息来源、是否为更新、消息类型"""
         message = update.effective_message
         chat = update.effective_chat
-        user = update.effective_user
-
-        # logger.info(f"类型：{chat.type}, 用户：{user}")
         
         if not message or not chat:
             return False, "unknown", False
-    
-        # 判断是否为更新
+
+        # 如果不是频道消息，才检查用户
+        if chat.type != 'channel':
+            user = update.effective_user
+            if user:  # 添加用户存在性检查
+                await context.bot_data['db'].ensure_user_exists(
+                    user.id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    last_name=user.last_name
+                )
+
         is_update = update.edited_message is not None or update.edited_channel_post is not None
-    
-        # 使用 chat.type 来区分消息来源
+
         if chat.type == 'channel':
             should_respond = await self._check_channel_chat(message)
         elif chat.type == 'private':
-            should_respond= await self._check_private_chat(message, user, context)
+            should_respond = await self._check_private_chat(message, update.effective_user, context)
         elif chat.type in ['group', 'supergroup']:
-            should_respond = await self._check_group_chat(message, user, context)
+            should_respond = await self._check_group_chat(message, update.effective_user, context)
         else:
             should_respond = False
 
-        # 增加使用次数
-        if should_respond:
-            await context.bot_data['db'].increment_user_usage(user.id)
-    
+        # 只有非频道消息且should_respond为True时才增加使用次数
+        if should_respond and chat.type != 'channel' and update.effective_user:
+            await context.bot_data['db'].increment_user_usage(update.effective_user.id)
+
         return should_respond, chat.type, is_update
         
     async def _check_private_chat(self, message: Message, user, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -125,7 +121,7 @@ class ResponseController:
         if str(message.chat.id) not in settings['allowed_groups']:
             return False
         
-        # 检查用户黑名单
+        # 检查��户黑名单
         if await self.is_user_blacklisted(user.id, context):
             return False
         

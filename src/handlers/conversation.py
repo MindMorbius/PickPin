@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
-    logger.info(f"类型：{update.message.chat.type}")
+    # 获取有效消息，可能是普通消息或频道消息
+    message = update.effective_message
+    logger.info(f"类型：{message.chat.type}")
 
     try:
-        # 保存或更新用户消息
-        message = update.effective_message
         message_obj = Message(
             message_id=message.message_id,
             chat_id=message.chat.id,
