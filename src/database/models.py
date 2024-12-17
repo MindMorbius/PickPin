@@ -44,3 +44,24 @@ class User:
         if self.last_usage_date != date.today():
             return True
         return self.daily_usage_count < daily_limit 
+
+@dataclass
+class Vote:
+
+    original_message_id: int  # 原始消息ID 
+    original_chat_id: int  # 原始消息的chat_id
+    user_id: int  # 发起人ID
+    vote_id: Optional[int] = None  # 主键
+    username: Optional[str] = None  # 用户名
+    contribute: Optional[str] = None  # 投稿原文
+    analyse: Optional[str] = None  # 分析内容
+    introduction: Optional[str] = None  # 投票介绍
+    message_id: Optional[int] = None  # 投票消息ID
+    chat_id: Optional[int] = None  # 群组ID
+    status: str = "pending"  # 状态：pending/approved/rejected
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items() if v is not None}

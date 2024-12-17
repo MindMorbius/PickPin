@@ -2,10 +2,11 @@ from typing import Optional, List, TypeVar, Type, Callable, Any, Dict
 from functools import wraps
 import logging
 from datetime import date
-from .models import Message, User
+from .models import Message, User, Vote
 from .base_controller import BaseController
 from .message_controller import MessageController
 from .user_controller import UserController
+from .vote_controller import VoteController
 import json
 
 logger = logging.getLogger(__name__)
@@ -28,11 +29,13 @@ class DBController:
     def __init__(self, db_path: str = "data/app.db"):
         self.message_controller = MessageController(db_path)
         self.user_controller = UserController(db_path)
-    
+        self.vote_controller = VoteController(db_path)
+
     async def init(self):
         """初始化数据库"""
         await self.message_controller.init()
         await self.user_controller.init()
+        await self.vote_controller.init()
 
     # Message operations
     @db_operation
@@ -81,3 +84,44 @@ class DBController:
         if await self.user_controller.increment_usage(user_id):
             return await self.get_user(user_id)
         return None
+
+    # Vote operations
+    @db_operation
+    async def save_vote(self, vote: Vote) -> bool:
+        return await self.vote_controller.save_vote(vote.to_dict())
+
+    @db_operation
+    async def get_vote(self, vote_id: int) -> Optional[Vote]:
+        data = await self.vote_controller.get_vote(vote_id)
+        return Vote(**data) if data else None
+
+    @db_operation
+    async def get_vote_by_original(self, original_message_id: int, original_chat_id: int) -> Optional[Vote]:
+        """通过原始消息ID获取投票"""
+        data = await self.vote_controller.get_vote_by_original(original_message_id, original_chat_id)
+        return Vote(**data) if data else None
+
+    @db_operation
+    async def get_vote_by_message(self, message_id: int, chat_id: int) -> Optional[Vote]:
+        """通过投票消息ID获取投票"""
+        data = await self.vote_controller.get_vote_by_message(message_id, chat_id)
+        return Vote(**data) if data else None
+
+    @db_operation
+    async def get_user_votes(self, user_id: int, limit: int = 100) -> List[Vote]:
+        votes = await self.vote_controller.get_user_votes(user_id, limit)
+        return [Vote(**vote) for vote in votes]
+
+    @db_operation
+    async def update_vote_status(self, vote_id: int, status: str) -> bool:
+        return await self.vote_controller.update_vote_status(vote_id, status)
+
+    @db_operation
+    async def update_vote_content(self, vote_id: int, analyse: str, introduction: str) -> bool:
+        """更新投票内容"""
+        return await self.vote_controller.update_vote_content(vote_id, analyse, introduction)
+
+    @db_operation
+    async def update_vote_message(self, vote_id: int, message_id: int, chat_id: int) -> bool:
+        """更新投票消息ID和群组ID"""
+        return await self.vote_controller.update_vote_message(vote_id, message_id, chat_id)

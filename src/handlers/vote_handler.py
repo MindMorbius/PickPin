@@ -15,6 +15,7 @@ class VoteHandler:
         self.handler = handler
         self.vote_duration = 24 * 60 * 60  # 24小时
     
+    # 暂时弃用
     async def start_vote(
         self,
         context: ContextTypes.DEFAULT_TYPE,
@@ -25,35 +26,43 @@ class VoteHandler:
         """发起投票"""
         response_controller = ResponseController()
         
-        # 检查发起投票的用户权限
-        if response_controller.is_user_blacklisted(self.handler.user_id):
+        if await response_controller.is_user_blacklisted(self.handler.user_id, context):
             await self.handler.send_notification("你已被禁止发起投票", auto_delete=True)
             return None
         
         try:
+            # 先将原始消息转发到群组
+            forwarded = await context.bot.forward_message(
+                chat_id=GROUP_ID,
+                from_chat_id=original_message.chat_id,
+                message_id=original_message.message_id
+            )
+
+            # 限制投票问题长度
             vote_text = (
-                f"{classification_result}\n\n"
+                f"{classification_result}\n"
                 f"用户 {self.handler.update.effective_user.first_name} "
                 f"(@{self.handler.update.effective_user.username}) 发起了投稿"
-            ).replace('\n\n\n', '\n\n')
+            )
 
-            # 发送投票，24小时后自动关闭
+            # 使用转发后的消息ID
             vote_message = await self.handler.bot.send_poll(
                 chat_id=GROUP_ID,
-                question=vote_text,
+                question=vote_text[:300],  # 限制长度
                 options=["👍 同意", "👎 反对"],
                 is_anonymous=True,
                 type=Poll.REGULAR,
                 open_period=self.vote_duration,
-                reply_to_message_id=original_message.message_id,
-                reply_markup=get_vote_buttons(),  # 保留管理员操作按钮
-                explanation=generated_content,
+                reply_to_message_id=forwarded.message_id,  # 使用转发后的消息ID
+                reply_markup=get_vote_buttons(),
+                explanation=f"{classification_result}\n\n{generated_content}",  # 将分类结果放在explanation中
                 explanation_parse_mode='HTML'
             )
 
-            # 在发送投票后保存投票消息ID到context
             context.chat_data['vote_message_id'] = vote_message.message_id
             context.chat_data['vote_initiator'] = self.handler.user_id
+            context.chat_data['original_message_id'] = original_message.message_id  # 保存原始消息ID
+            context.chat_data['forwarded_message_id'] = forwarded.message_id  # 保存转发后的消息ID
 
             # 记录投票日志
             vote_log_data = {
@@ -81,12 +90,14 @@ class VoteHandler:
                 user_id=self.handler.user_id,
                 text=vote_text,
                 type='vote',
-                reply_to_message_id=original_message.message_id,
+                reply_to_message_id=forwarded.message_id,  # 使用转发后的消息ID
                 metadata={
                     'content': generated_content,
                     'classification': classification_result,
                     'status': 'started',
-                    'initiator_id': self.handler.user_id
+                    'initiator_id': self.handler.user_id,
+                    'original_message_id': original_message.message_id,
+                    'forwarded_message_id': forwarded.message_id
                 }
             )
             await context.bot_data['db'].save_message(vote_message)
@@ -106,7 +117,7 @@ class VoteHandler:
         """管理员强制通过"""
         response_controller = ResponseController()
         
-        if not response_controller.is_user_admin(self.handler.user_id):
+        if not await response_controller.is_user_admin(self.handler.user_id, context):
             return
         
         try:
@@ -142,58 +153,44 @@ class VoteHandler:
         """发布通过的内容"""
         try:
             vote_message_id = context.chat_data.get('vote_message_id')
-            if not vote_message_id:
-                return
-
-            # 从数据库获取投票信息
-            vote_data = await context.bot_data['db'].get_message(vote_message_id, GROUP_ID)
-            if not vote_data:
-                logger.error("Vote data not found in database")
-                return
-
-            # 获取原始消息ID和生成的内容
-            metadata = vote_data.get('metadata', {})
-            reply_to_message_id = vote_data.get('reply_to_message_id')
-            generated_content = metadata.get('content')
-
-            if not all([reply_to_message_id, generated_content]):
-                logger.error("Missing required vote data")
-                return
-
-            # 转发原始消息到频道
-            forwarded = await context.bot.forward_message(
-                chat_id=CHANNEL_ID,
-                from_chat_id=GROUP_ID,
-                message_id=reply_to_message_id
+            vote_data = await context.bot_data['db'].get_vote_by_message(
+                vote_message_id, 
+                GROUP_ID
             )
-
-            if forwarded:
-                try:
-                    # 发送生成的内容
-                    sent_message = await context.bot.send_message(
-                        chat_id=CHANNEL_ID,
-                        text=generated_content,
-                        reply_to_message_id=forwarded.message_id,
-                        parse_mode='Markdown'
-                    )
-                    
-                    # 通知投稿者
-                    initiator_id = metadata.get('initiator_id')
-                    if initiator_id:
-                        await context.bot.send_message(
-                            chat_id=initiator_id,
-                            text="✨ 恭喜！你的投稿已通过并发布"
-                        )
-                except Exception as e:
-                    logger.error(f"Error sending content: {e}")
-                    # 发送失败时的降级处理
-                    await context.bot.send_message(
-                        chat_id=CHANNEL_ID,
-                        text=generated_content,
-                        parse_mode=None,
-                        reply_to_message_id=forwarded.message_id
-                    )
-
+            
+            if not vote_data:
+                logger.error("Vote data not found")
+                return
+            
+            # 组装发布内容
+            content = (
+                f"<b>投稿内容</b>\n"
+                f"<blockquote expandable>{vote_data.contribute}</blockquote>\n"
+                f"<b>AI分析</b>\n"
+                f"<blockquote expandable>{vote_data.analyse}</blockquote>"
+            )
+                
+            try:
+                # 发送内容
+                sent_message = await context.bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=content,
+                    parse_mode='HTML'
+                )
+                
+                # 通知投稿者
+                await context.bot.send_message(
+                    chat_id=vote_data.user_id,
+                    text="✨ 恭喜！你的投稿已通过并发布"
+                )
+            except Exception as e:
+                logger.error(f"Error sending content: {e}")
+                # 降级处理
+                await context.bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=content,
+                    parse_mode=None
+                )
         except Exception as e:
             logger.error(f"Failed to publish content: {e}")
 

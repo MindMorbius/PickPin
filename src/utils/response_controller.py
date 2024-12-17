@@ -121,7 +121,7 @@ class ResponseController:
         if str(message.chat.id) not in settings['allowed_groups']:
             return False
         
-        # 检查��户黑名单
+        # 检查用户黑名单
         if await self.is_user_blacklisted(user.id, context):
             return False
         

@@ -13,6 +13,7 @@ from utils.telegram_handler import TelegramMessageHandler
 import re
 import asyncio
 from utils.response_controller import ResponseController
+from database.models import Vote
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if chat.type == 'private':
         await handler.reply_to_command(
             f"你的用户 ID 是: {user.id}",
+            reply_to_message_id=update.message.message_id,
             auto_delete=False
         )
     elif chat.id == GROUP_ID:
@@ -52,14 +54,132 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"类型: {chat.type}\n"
             f"名称: {chat.title}\n"
             f"你的用户 ID: {user.id}",
+            reply_to_message_id=update.message.message_id,
             auto_delete=False
         )
 async def submit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
-    await handler.reply_to_command(
-        "请发送要投稿的内容",
-        auto_delete=True
+    response_controller = ResponseController()
+    
+    if not await response_controller.is_user_allowed(update, False, context):
+        return
+        
+    message = update.message
+    user = update.effective_user
+    
+    if not message.reply_to_message:
+        await handler.reply_to_command(
+            "请引用要投稿的消息使用此命令",
+            reply_to_message_id=message.message_id,
+            auto_delete=True
+        )
+        return
+        
+    # 获取原始消息信息
+    original_message = message.reply_to_message
+    
+    # 从api_kwargs中获取forward_origin信息
+    forward_origin = original_message.api_kwargs.get('forward_origin') if hasattr(original_message, 'api_kwargs') else None
+    
+    if forward_origin and forward_origin.get('type') == 'channel':
+        # 如果是从频道转发的消息
+        chat_info = forward_origin.get('chat', {})
+        original_chat_id = chat_info.get('id')
+        original_message_id = forward_origin.get('message_id')
+    elif original_message.forward_from_chat:
+        # 兼容旧的转发消息格式
+        original_chat_id = original_message.forward_from_chat.id
+        original_message_id = original_message.forward_from_message_id
+    else:
+        # 普通消息
+        original_chat_id = original_message.chat_id
+        original_message_id = original_message.message_id
+
+    # 保存基础投票数据
+    vote = Vote(
+        original_message_id=original_message_id,
+        original_chat_id=original_chat_id,
+        user_id=update.effective_user.id,
+        username=update.effective_user.username,
+        contribute=original_message.text or original_message.caption
     )
+    
+    if not await context.bot_data['db'].save_vote(vote):
+        await handler.reply_to_command("保存投票失败")
+        return
+
+    reply_text = message.reply_to_message.text or message.reply_to_message.caption
+    if not reply_text:
+        await handler.reply_to_command(
+            "无法处理此类型的消息",
+            reply_to_message_id=message.message_id,
+            auto_delete=True
+        )
+        return
+
+    try:
+        last_text = ""
+        prompt_type = None
+        analyzing_msg = await handler.send_message(
+            "正在分析内容...",
+            reply_to_message_id=message.reply_to_message.message_id
+        )
+        
+        async for classification_text, should_update in get_ai_response(reply_text, CLASSIFY_PROMPT):
+            if should_update:
+                try:
+                    cleaned_text = classification_text
+                    await handler.edit_message(analyzing_msg, cleaned_text, parse_mode='HTML')
+                    last_text = cleaned_text
+                except Exception as e:
+                    await handler.edit_message(analyzing_msg, classification_text, parse_mode=None)
+                    last_text = classification_text
+                
+                if 'TECH_PROMPT' in classification_text:
+                    selected_prompt = TECH_PROMPT
+                elif 'NEWS_PROMPT' in classification_text:
+                    selected_prompt = NEWS_PROMPT
+                elif 'CULTURE_PROMPT' in classification_text:
+                    selected_prompt = CULTURE_PROMPT
+                elif 'KNOWLEDGE_PROMPT' in classification_text:
+                    selected_prompt = KNOWLEDGE_PROMPT
+                else:
+                    selected_prompt = CHAT_PROMPT
+        
+        context.user_data['original_message'] = message.reply_to_message
+        context.user_data['classification_result'] = last_text
+        context.user_data['prompt_type'] = prompt_type
+        
+        generated_text = ""
+        generation_msg = await handler.send_message(
+            "正在生成内容...",
+            reply_to_message_id=message.reply_to_message.message_id
+        )
+        
+        async for content_text, should_update in get_ai_response(reply_text, selected_prompt):
+            if should_update:
+                try:
+                    cleaned_text = content_text
+                    await handler.edit_message(generation_msg, cleaned_text, parse_mode='HTML')
+                    generated_text = cleaned_text
+                except Exception as e:
+                    await handler.edit_message(generation_msg, content_text, parse_mode=None)
+                    generated_text = content_text
+        
+        await handler.edit_message(
+            generation_msg,
+            generated_text,
+            reply_markup=get_content_options_buttons(),
+            parse_mode='HTML'
+        )
+        
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        await handler.send_notification(
+            "分析失败，请重试",
+            reply_to_message_id=message.message_id,
+            auto_delete=False
+        )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     handler = TelegramMessageHandler(update, context)
@@ -69,7 +189,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2. 使用 /submit 命令 回复需要投稿的内容\n"
         "3. 机器人会根据内容分析，并生成投稿内容\n"
         "4. 如果觉得内容不错，点击“投个稿”按钮\n"
-        "5. 机器人会将投稿内容发送到群组 @rk_pin_bus 进行审核\n\n"
+        "5. 机器人会将��稿内容发送到群组 @rk_pin_bus 进行审核\n\n"
 
         "如果需要帮助，请在群组：@rk_pin_bus 中联系管理员。",
         auto_delete=False
