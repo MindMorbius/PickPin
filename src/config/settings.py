@@ -1,8 +1,8 @@
 import os
 from dotenv import load_dotenv
 
-# 指定 .env.local 文件路径
-load_dotenv('.env.local')
+# 指定 .env 文件路径
+load_dotenv('.env')
 
 # Telegram 配置
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
