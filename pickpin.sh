@@ -71,7 +71,7 @@ stop_bot() {
     if [ ! -f "$PID_FILE" ]; then
         echo -e "${RED}Bot 未运行${NC}"
         return 1
-    }
+    fi
     
     echo "停止 Bot..."
     kill $(cat "$PID_FILE")
