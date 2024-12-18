@@ -10,6 +10,7 @@ from handlers.callback import handle_callback
 from config.settings import AI_PROVIDER, OPENAI_MODEL, GOOGLE_MODEL, CHANNEL_ID, GROUP_ID
 from database.db_controller import DBController
 from datetime import datetime
+import time  # 添加这个导入
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
@@ -137,41 +138,38 @@ def setup_handlers(app: Application) -> None:
     app.add_error_handler(error_handler)
 
 
-def main() -> None:
+def main() -> None:  # 改回同步函数
     # 创建 JobQueue 实例
     job_queue = JobQueue()
     
-    application = Application.builder()\
-        .token(TELEGRAM_BOT_TOKEN)\
-        .proxy(HTTP_PROXY)\
-        .get_updates_proxy(HTTP_PROXY)\
-        .connect_timeout(30.0)\
-        .read_timeout(30.0)\
-        .write_timeout(30.0)\
-        .pool_timeout(30.0)\
-        .job_queue(job_queue)\
-        .build()
-
-    # 设置处理器
-    setup_handlers(application)
-    
-    # 设置启动回调
-    application.post_init = post_init
-    
-    # 添加重试逻辑
     while True:
         try:
-            application.run_polling(
+            application = Application.builder()\
+                .token(TELEGRAM_BOT_TOKEN)\
+                .proxy(HTTP_PROXY)\
+                .get_updates_proxy(HTTP_PROXY)\
+                .connect_timeout(30.0)\
+                .read_timeout(30.0)\
+                .write_timeout(30.0)\
+                .pool_timeout(30.0)\
+                .job_queue(job_queue)\
+                .build()
+
+            setup_handlers(application)
+            application.post_init = post_init
+            
+            application.run_polling(  # 移除 await
                 allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,  # 启动时忽略积压的更新
-                poll_interval=1.0,  # 轮询间隔
-                timeout=30  # 轮询超时
+                drop_pending_updates=True,
+                poll_interval=1.0,
+                timeout=30
             )
         except Exception as e:
             logger.error(f"Polling error: {e}")
             logger.info("Waiting 10 seconds before retry...")
-            asyncio.sleep(10)
+            time.sleep(10)
             continue
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main())  # 这行保持不变
+  
